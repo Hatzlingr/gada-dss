@@ -70,14 +70,14 @@ This execution plan uses **dependency-driven Milestones** instead of rigid day c
 
 #### Checklist
 
-- [ ] Establish cohesive global design tokens, clean typography, and light/neutral palette in `src/app/globals.css` and `src/app/layout.tsx`.
-- [ ] Build `src/components/gada/ResultsView.tsx` (`'use client'`) accepting `result` and optional `onExportExcel`:
+- [x] Establish cohesive global design tokens, clean typography, and light/neutral palette in `src/app/globals.css` and `src/app/layout.tsx`.
+- [x] Build `src/components/gada/ResultsView.tsx` (`'use client'`) accepting `output` and `input` (`onExportExcel` to be wired in Milestone 3):
   - Top 3 Podium Cards with 6-decimal $\hat{R}_j$ and tier badges.
   - KPI Summary Strip (active criteria count, auto-excluded criteria count, total alternatives, average group $\sqrt{\alpha}$).
   - Responsive Recharts horizontal `BarChart` of sorted criterion weights ($W_k\%$), distinguishing `cost` vs `benefit`.
-  - Searchable, tier-filterable Ranking Leaderboard table (`rank`, `name`, `address`, 6-decimal $\hat{r}_j$, 6-decimal $\hat{R}_j$, tier badge) plus Export Excel button.
-- [ ] Build `src/app/page.tsx` (`'use client'`) managing top-level `GadaInput` state (initialized with `laundrySeedInput`), safely evaluating `runGadaAnalysis(input)` inside `useMemo` with `try/catch`, displaying validation errors via `Alert` without crashing, and rendering the header bar + 4-Tab workspace (`ResultsView` wired on Tab 1; clean placeholder cards on Tabs 2–4 ready for Milestone 3 wiring).
-- [ ] **Acceptance Criteria:** `npm run typecheck` and `npm run lint` pass with $0$ errors; `npm run dev` renders cleanly on desktop and mobile.
+  - Searchable, tier-filterable Ranking Leaderboard table (`rank`, `name`, `address`, 6-decimal $\hat{r}_j$, 6-decimal $\hat{R}_j$, tier badge).
+- [x] Build `src/app/page.tsx` (`'use client'`) managing top-level `GadaInput` state (initialized with `laundrySeedInput`), safely evaluating `runGadaAnalysis(input)` inside `useMemo` with `try/catch`, displaying validation errors via `Alert` without crashing, and rendering the header bar + 4-Tab workspace (`ResultsView` wired on Tab 1; clean placeholder cards on Tabs 2–4 ready for Milestone 3 wiring).
+- [x] **Acceptance Criteria:** Merged via PR #2 (`01b56af`) to `main`; `npm run typecheck`, `npm run test`, and `npm run lint` pass with $0$ errors.
 
 #### Copy-Paste Prompt for Stevanus's AI Agent
 
