@@ -27,10 +27,19 @@ import type { GadaInput, GadaOutput } from "@/lib/gada/types";
 
 interface DataEditorPlaceholderProps {
   input: GadaInput;
+  result: GadaOutput | null;
+  error: string | null;
   onChange: (nextInput: GadaInput) => void;
+  onResetPreset: () => void;
 }
 
-function DataEditorPlaceholder({ input, onChange }: DataEditorPlaceholderProps) {
+function DataEditorPlaceholder({
+  input,
+  result,
+  error,
+  onChange,
+  onResetPreset,
+}: DataEditorPlaceholderProps) {
   return (
     <Card>
       <CardHeader>
@@ -44,9 +53,12 @@ function DataEditorPlaceholder({ input, onChange }: DataEditorPlaceholderProps) 
       </CardHeader>
       <CardContent className="space-y-4 text-sm text-muted-foreground">
         <p>
-          Panel ini siap menerima komponen <code className="font-mono text-foreground">DataEditor</code> dengan kontrak{" "}
-          <code className="font-mono text-foreground">input</code> dan{" "}
-          <code className="font-mono text-foreground">onChange</code> ({typeof onChange === "function" ? "terhubung" : "menunggu"}).
+          Panel ini siap menerima komponen <code className="font-mono text-foreground">DataEditor</code> dengan 5 props:{" "}
+          <code className="font-mono text-foreground">input</code>,{" "}
+          <code className="font-mono text-foreground">result</code> ({result ? "tersedia" : "null"}),{" "}
+          <code className="font-mono text-foreground">error</code> ({error ? "aktif" : "null"}),{" "}
+          <code className="font-mono text-foreground">onChange</code> ({typeof onChange === "function" ? "terhubung" : "menunggu"}), dan{" "}
+          <code className="font-mono text-foreground">onResetPreset</code> ({typeof onResetPreset === "function" ? "terhubung" : "menunggu"}).
         </p>
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">{input.alternatives.length} Alternatif</Badge>
@@ -58,66 +70,55 @@ function DataEditorPlaceholder({ input, onChange }: DataEditorPlaceholderProps) 
   );
 }
 
-interface PreferenceSimulatorPlaceholderProps {
-  output: GadaOutput | null;
-  overrideWeights: Record<string, number> | undefined;
-  onOverrideChange: (nextOverrides: Record<string, number> | undefined) => void;
+interface SimulatorViewPlaceholderProps {
+  input: GadaInput;
+  baseResult: GadaOutput;
 }
 
-function PreferenceSimulatorPlaceholder({
-  output,
-  overrideWeights,
-  onOverrideChange,
-}: PreferenceSimulatorPlaceholderProps) {
-  const hasOverrides = overrideWeights !== undefined;
-
+function SimulatorViewPlaceholder({
+  input,
+  baseResult,
+}: SimulatorViewPlaceholderProps) {
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <SlidersHorizontal className="size-4 text-primary" aria-hidden="true" />
-          Simulator Bobot
+          Simulator &amp; Radar
         </CardTitle>
         <CardDescription>
-          Modul Simulator Preferensi Personal — disiapkan untuk integrasi PreferenceSimulator
+          Modul What-If Simulator &amp; Perbandingan Radar — disiapkan untuk integrasi SimulatorView
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 text-sm text-muted-foreground">
         <p>
-          Panel ini siap menerima komponen <code className="font-mono text-foreground">PreferenceSimulator</code> dengan kontrak{" "}
-          <code className="font-mono text-foreground">output</code>,{" "}
-          <code className="font-mono text-foreground">overrideWeights</code>, dan{" "}
-          <code className="font-mono text-foreground">onOverrideChange</code>.
+          Panel ini siap menerima komponen <code className="font-mono text-foreground">SimulatorView</code> dengan kontrak{" "}
+          <code className="font-mono text-foreground">input</code> dan{" "}
+          <code className="font-mono text-foreground">baseResult</code>.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline">
-            {output ? `${output.activeCriteria.length} Kriteria Aktif` : "Menunggu data valid"}
+            {baseResult.activeCriteria.length} Kriteria Aktif
           </Badge>
-          <Badge variant={hasOverrides ? "default" : "secondary"}>
-            {hasOverrides ? "Override Bobot Aktif" : "Menggunakan Konsensus Kelompok"}
+          <Badge variant="outline">
+            {input.alternatives.length} Alternatif Siap Simulasi
           </Badge>
-          {hasOverrides ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => onOverrideChange(undefined)}
-            >
-              Kembalikan Bobot Konsensus
-            </Button>
-          ) : null}
+          <Badge variant="secondary">Menggunakan Konsensus Kelompok</Badge>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-interface AuditTracePlaceholderProps {
+interface AuditDiagnosticsPlaceholderProps {
   input: GadaInput;
-  output: GadaOutput | null;
+  result: GadaOutput;
 }
 
-function AuditTracePlaceholder({ input, output }: AuditTracePlaceholderProps) {
+function AuditDiagnosticsPlaceholder({
+  input,
+  result,
+}: AuditDiagnosticsPlaceholderProps) {
   return (
     <Card>
       <CardHeader>
@@ -126,24 +127,24 @@ function AuditTracePlaceholder({ input, output }: AuditTracePlaceholderProps) {
           Audit &amp; Ekspor
         </CardTitle>
         <CardDescription>
-          Modul Jejak Perhitungan &amp; Ekspor Laporan — disiapkan untuk integrasi AuditTraceView
+          Modul Jejak Perhitungan &amp; Ekspor Laporan — disiapkan untuk integrasi AuditDiagnosticsView
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 text-sm text-muted-foreground">
         <p>
-          Panel ini siap menerima komponen <code className="font-mono text-foreground">AuditTraceView</code> dengan kontrak{" "}
+          Panel ini siap menerima komponen <code className="font-mono text-foreground">AuditDiagnosticsView</code> dengan kontrak{" "}
           <code className="font-mono text-foreground">input</code> dan{" "}
-          <code className="font-mono text-foreground">output</code>.
+          <code className="font-mono text-foreground">result</code>.
         </p>
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">
             Dataset: {input.datasetName ?? "Tanpa Judul"}
           </Badge>
           <Badge variant="outline">
-            {output ? `${output.imputationLogs.length} Log Imputasi` : "Belum dihitung"}
+            {result.imputationLogs.length} Log Imputasi
           </Badge>
           <Badge variant="outline">
-            {output ? `${output.excludedCriteria.length} Kriteria Dieliminasi` : "—"}
+            {result.excludedCriteria.length} Kriteria Dieliminasi
           </Badge>
         </div>
       </CardContent>
@@ -151,37 +152,43 @@ function AuditTracePlaceholder({ input, output }: AuditTracePlaceholderProps) {
   );
 }
 
+function InvalidResultCard({ description }: { description: string }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Hasil Tidak Tersedia</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+    </Card>
+  );
+}
+
 export default function HomePage() {
   const [gadaInput, setGadaInput] = useState<GadaInput>(laundrySeedInput);
-  const [overrideWeights, setOverrideWeights] = useState<
-    Record<string, number> | undefined
-  >(undefined);
 
   const analysis = useMemo(() => {
     try {
-      const output = runGadaAnalysis(gadaInput, overrideWeights);
-      return { output, error: null as string | null };
+      const result = runGadaAnalysis(gadaInput);
+      return { result, error: null as string | null };
     } catch (err) {
       return {
-        output: null as GadaOutput | null,
+        result: null as GadaOutput | null,
         error:
           err instanceof Error
             ? err.message
             : "Terjadi kesalahan saat menghitung analisis GADA.",
       };
     }
-  }, [gadaInput, overrideWeights]);
+  }, [gadaInput]);
 
-  const isModified =
-    gadaInput !== laundrySeedInput || overrideWeights !== undefined;
+  const isModified = gadaInput !== laundrySeedInput;
 
-  const activeCriteriaCount = analysis.output
-    ? analysis.output.activeCriteria.length
+  const activeCriteriaCount = analysis.result
+    ? analysis.result.activeCriteria.length
     : gadaInput.criteria.filter((criterion) => criterion.active).length;
 
-  const handleResetDefault = () => {
+  const handleResetPreset = () => {
     setGadaInput(laundrySeedInput);
-    setOverrideWeights(undefined);
   };
 
   return (
@@ -189,16 +196,9 @@ export default function HomePage() {
       <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <div className="space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold tracking-wider text-primary uppercase">
-                GADA DSS • Kelompok 6 UNSRI
-              </span>
-              {overrideWeights !== undefined ? (
-                <Badge variant="secondary" className="text-xs">
-                  Mode Simulasi Personal
-                </Badge>
-              ) : null}
-            </div>
+            <span className="text-xs font-semibold tracking-wider text-primary uppercase">
+              GADA DSS • Kelompok 6 UNSRI
+            </span>
             <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
               {gadaInput.datasetName ?? "Dataset Evaluasi GADA"}
             </h1>
@@ -206,9 +206,7 @@ export default function HomePage() {
               <Badge variant="outline">
                 {gadaInput.alternatives.length} Alternatif
               </Badge>
-              <Badge variant="outline">
-                {activeCriteriaCount} Kriteria Aktif
-              </Badge>
+              <Badge variant="outline">{activeCriteriaCount} Kriteria Aktif</Badge>
               <Badge variant="outline">
                 {gadaInput.respondents.length} Responden
               </Badge>
@@ -221,11 +219,11 @@ export default function HomePage() {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={handleResetDefault}
+                onClick={handleResetPreset}
                 className="gap-1.5"
               >
                 <RotateCcw className="size-3.5" aria-hidden="true" />
-                Reset ke Dataset Default
+                Reset UNSRI Preset
               </Button>
             </div>
           ) : null}
@@ -253,7 +251,7 @@ export default function HomePage() {
             </TabsTrigger>
             <TabsTrigger value="simulator" className="gap-1.5 px-3 py-1.5">
               <SlidersHorizontal className="size-4" aria-hidden="true" />
-              <span>Simulator Bobot</span>
+              <span>Simulator &amp; Radar</span>
             </TabsTrigger>
             <TabsTrigger value="audit" className="gap-1.5 px-3 py-1.5">
               <FileSpreadsheet className="size-4" aria-hidden="true" />
@@ -262,40 +260,43 @@ export default function HomePage() {
           </TabsList>
 
           <TabsContent value="results">
-            {analysis.output ? (
-              <ResultsView output={analysis.output} input={gadaInput} />
+            {analysis.result ? (
+              <ResultsView result={analysis.result} />
             ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Hasil Tidak Tersedia</CardTitle>
-                  <CardDescription>
-                    Perbaiki error validasi pada banner di atas atau klik Reset ke Dataset Default untuk menampilkan hasil peringkat GADA.
-                  </CardDescription>
-                </CardHeader>
-              </Card>
+              <InvalidResultCard description="Perbaiki error validasi pada banner di atas atau klik Reset UNSRI Preset untuk menampilkan hasil peringkat GADA." />
             )}
           </TabsContent>
 
           <TabsContent value="data">
             <DataEditorPlaceholder
               input={gadaInput}
+              result={analysis.result}
+              error={analysis.error}
               onChange={setGadaInput}
+              onResetPreset={handleResetPreset}
             />
           </TabsContent>
 
           <TabsContent value="simulator">
-            <PreferenceSimulatorPlaceholder
-              output={analysis.output}
-              overrideWeights={overrideWeights}
-              onOverrideChange={setOverrideWeights}
-            />
+            {analysis.result ? (
+              <SimulatorViewPlaceholder
+                input={gadaInput}
+                baseResult={analysis.result}
+              />
+            ) : (
+              <InvalidResultCard description="Simulator membutuhkan hasil perhitungan GADA yang valid terlebih dahulu." />
+            )}
           </TabsContent>
 
           <TabsContent value="audit">
-            <AuditTracePlaceholder
-              input={gadaInput}
-              output={analysis.output}
-            />
+            {analysis.result ? (
+              <AuditDiagnosticsPlaceholder
+                input={gadaInput}
+                result={analysis.result}
+              />
+            ) : (
+              <InvalidResultCard description="Audit perhitungan membutuhkan data GADA yang valid terlebih dahulu." />
+            )}
           </TabsContent>
         </Tabs>
       </main>
