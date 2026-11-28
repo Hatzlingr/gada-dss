@@ -14,7 +14,7 @@
 This application is a **dynamic, domain-agnostic Multi-Criteria Group Decision-Making (MCGDM)** web system implementing the adapted **Grey Absolute Decision Analysis (GADA)** method.
 
 - **Method Adaptation:** Rather than requiring every decision-maker to score every alternative cell (3D matrix in the original paper), decision-makers ($N$ respondents) rate **criterion importance** on a positive scale (e.g., 1–5 Likert), while alternative performance ($S$ alternatives $\times$ $M$ criteria) comes from **objective measurements**.
-- **Default Seed Preset:** Ships pre-loaded with the UNSRI Laundry dataset ($20$ alternatives, $9$ active criteria + $1$ zero-variance QRIS column, $30$ student respondents).
+- **Case Study Test Fixture:** The UNSRI Laundry dataset ($20$ alternatives, $9$ active criteria + $1$ zero-variance QRIS column, $30$ student respondents) lives in `src/data/laundry-seed.ts` solely as a ground-truth benchmark fixture for automated tests (`tests/gada/laundry.test.ts`), not pre-loaded in the UI.
 - **Universal Multi-Domain Support:** Zero hardcoded dimensions or column names inside the calculation engine. Any decision problem (boarding houses, cafes, vendors, laptops, scholarships) with arbitrary $S \ge 1$, $M \ge 2$, and $N \ge 1$ must work via spreadsheet upload, blank dataset creation, or live table editing.
 
 ---
@@ -120,20 +120,8 @@ $$
    $$
    \hat{r}_j = \exp\left(\sum_{k=1}^{M} W_k \ln(r_{jk})\right), \qquad \hat{R}_j = \frac{\hat{r}_j}{\sum_{p=1}^{S} \hat{r}_p}
    $$
-2. **Ranking & Tier Classification (stored in `constants.ts`):**
-   Sort descending by $\hat{R}_j$ (Rank $1$ = highest score):
-   - Rank $1$–$3$: `Sangat Direkomendasikan`
-   - Rank $4$–$10$: `Direkomendasikan`
-   - Rank $\ge 11$: `Kurang Direkomendasikan`
-
-### Step 4: Simulator Override & Radar Normalization
-
-1. **Personal Weight Override:** When optional `overrideWeights` (user slider scores $u_k \in [1, 5]$) is passed to `runGadaAnalysis`, bypass respondent aggregation and compute $W_k^{\text{sim}} = u_k / \sum_{m=1}^{M} u_m$, then run Steps 2 and 3 directly.
-2. **Rank Delta:** $\Delta\text{Rank}_j = \text{GroupRank}_j - \text{PersonalRank}_j$ (positive = rank improved; negative = rank dropped).
-3. **Radar Profile Scaling (0–100):** For visual multi-alternative comparison across mixed units, scale each column $k$ of `reciprocatedMatrix` relative to its column maximum:
-   $$
-   z_{jk} = \frac{r_{jk}}{\max_{1 \le p \le S} r_{pk}} \times 100
-   $$
+2. **Ranking:**
+   Sort descending by $\hat{R}_j$ (Rank $1$ = highest score), with Top 3 visually highlighted in the results view regardless of dataset size $S$.
 
 ---
 
@@ -143,63 +131,52 @@ All modules share exact contracts defined in `src/lib/gada/types.ts` and default
 
 | Entity                                    | Required Fields                                                                                                                                                                                              | Optional / Notes                                                                                                                                  |
 | :---------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **`CriterionConfig`**             | `id`, `code`, `name`, `type` (`cost` \| `benefit`), `missingStrategy` (`penalty_max` \| `min_value` \| `custom_penalty`), `active` (boolean)                                           | `unit`, `isBinary`, `customPenalty` (number)                                                                                                |
+| **`CriterionConfig`**             | `id`, `code`, `name`, `type` (`cost` \| `benefit`), `missingStrategy` (`penalty_max` \| `min_value` \| `mean` \| `custom_penalty`), `active` (boolean)                                | `unit`, `isBinary`, `customPenalty` (number)                                                                                                |
 | **`AlternativeItem`**             | `id`, `name`                                                                                                                                                                                             | `address` (or general description/notes)                                                                                                        |
-| **`RespondentItem`**              | `id`, `name`                                                                                                                                                                                             | `faculty`, `major`, `batch`                                                                                                                 |
+| **`RespondentItem`**              | `id`, `name`                                                                                                                                                                                             | Domain-agnostic respondent identifier and display name                                                                                            |
 | **`GadaOptions`**                 | `binaryTrueValue` (default `5`), `binaryFalseValue` (default `1`), `autoDropZeroVariance` (default `true`)                                                                                       | Single source of truth for preprocessing behavior                                                                                                 |
 | **`GadaInput`**                   | `criteria`, `alternatives`, `respondents`, `alternativeValues` ($S \times M$ map), `respondentScores` ($N \times M$ map), `options`                                                          | `datasetName`                                                                                                                                   |
 | **`CriterionWeightResult`**       | `criterionId`, `code`, `name`, `type`, `simulatedDelta` ($\delta_k$), `normalizedWeight` ($W_k$), `percentage`, `rank`                                                                   | Ordered by active criteria index; `rank` denotes priority $1 \dots M$                                                                         |
 | **`RespondentConsistencyResult`** | `respondentId`, `name`, `signedArea` ($s_i$), `absSignedArea` ($|s_i|$), `alpha` ($\alpha_i$), `sqrtAlpha` ($\sqrt{\alpha_i}$), `status` (`high` \| `moderate` \| `low_warning`) | Used in KPI averages and Audit Diagnostics                                                                                                        |
-| **`AlternativeRankingResult`**    | `alternativeId`, `name`, `gadaIndex` ($\hat{r}_j$), `relativeScore` ($\hat{R}_j$), `rank`, `tier`                                                                                            | `address`; sorted descending by `relativeScore`                                                                                               |
+| **`AlternativeRankingResult`**    | `alternativeId`, `name`, `gadaIndex` ($\hat{r}_j$), `relativeScore` ($\hat{R}_j$), `rank`                                                                                                     | `address`; sorted descending by `relativeScore`                                                                                               |
 | **`GadaOutput`**                  | `activeCriteria`, `excludedCriteria`, `imputationLogs`, `criteriaWeights`, `respondentConsistency`, `rankings`, `auditTrace`                                                                   | `auditTrace` holds 6 matrices: `cleanedMatrix`, `betaMatrix`, `zeroPointMatrix`, `agrpcMatrix`, `thetaMatrix`, `reciprocatedMatrix` |
-| **`SimulationComparisonRow`**     | `alternativeId`, `name`, `groupRank`, `personalRank`, `rankDelta`, `groupScore`, `personalScore`                                                                                               | Produced by `src/lib/gada/simulator.ts`                                                                                                         |
 
 ---
 
 ## 5. Module Behavioral Specifications
 
-### 5.1 Core Math Engine (`src/lib/gada/engine.ts` — Amirul)
+### 5.1 Core Math Engine (`src/lib/gada/engine.ts`)
 
-- Exposes `parseRawCell` (for granular unit testing) and `runGadaAnalysis(input, overrideWeights?)`.
+- Exposes `parseRawCell` (for granular unit testing) and `runGadaAnalysis(input)`.
 - Pure deterministic logic: zero React, DOM, or external side effects.
 - Throws clear, human-readable validation errors on invalid dimensions ($M < 2$, $S < 1$, $N < 1$) or non-positive values ($\le 0$).
 
-### 5.2 Universal Spreadsheet I/O (`src/lib/gada/excel.ts` — Fathir)
+### 5.2 Universal Spreadsheet I/O (`src/lib/gada/excel.ts`)
 
-- **Import (`parseSpreadsheetToGadaInput`):** Accepts any `.xlsx`, `.xls`, or `.csv` file:
-  - **Auto-Detect Mode A (Group 6 Survey Workbook):** If sheets named `Data Laundry` and `Bobot Kriteria` exist (case-insensitive), automatically maps `C1`–`C6` (`cost`), `C7`–`C9` (`benefit`), `Pembayaran QRIS` (binary candidate), `C3` `customPenalty = 20000`, `C1` `penalty_max`, and `C6` `min_value`.
-  - **Auto-Detect Mode B (Generic Multi-Domain File):**
-    - **Sheet 1 (Alternatives):** Column 1 = Alternative Name; if Column 2 header matches `alamat`/`address`/`deskripsi`/`description`/`catatan`, map to `address`; remaining columns become criteria `C1..CM`. Auto-flag `isBinary` if all non-empty entries are boolean words. Default new criteria to `benefit` (`min_value`); toggling to `cost` in UI switches default missing strategy to `penalty_max`.
-    - **Sheet 2 (Respondents — Optional):** Column 1 = Respondent Name; remaining columns = positive criterion importance scores. If absent (e.g., single-sheet CSV), auto-generate 1 neutral respondent (`"Default Equal Weight"`, score `3` for every criterion) so ranking runs immediately.
+- **Import (`parseSpreadsheetToGadaInput`):** Pure domain-agnostic parser accepting any `.xlsx`, `.xls`, or `.csv` file:
+  - **Sheet 1 (Alternatives):** Column 1 = Alternative Name; if Column 2 header matches `alamat`/`address`/`deskripsi`/`description`/`catatan`/`keterangan`, map to `address`; remaining columns become criteria `C1..CM`. Recognizes optional `(Cost)` / `(Benefit)` suffix tags in criterion headers (setting `cost` + `penalty_max`, or `benefit` + `min_value` by default). Auto-flags `isBinary` if all non-empty entries are boolean words.
+  - **Sheet 2 (Respondents — Optional):** Column 1 = Respondent Name; remaining columns = positive criterion importance scores matching Sheet 1 criteria (by code, header name, or position). If absent (e.g., single-sheet CSV), auto-generates 1 neutral respondent (`"Bobot Setara Default"`, score `3` for every criterion) so ranking runs immediately.
 - **Blank Dataset & Template Helpers:**
   - `createBlankGadaInput()`: Returns a valid minimal starter dataset ($3$ alternatives, $3$ criteria: $1$ `cost` + $2$ `benefit`, $2$ respondents).
-  - `downloadTemplateWorkbook()`: Generates and downloads a clean 2-sheet `.xlsx` template (`Alternatives`, `Respondents`).
+  - `downloadTemplateWorkbook()`: Generates and downloads a clean 2-sheet `.xlsx` template (`Alternatif`, `Responden`).
 
-### 5.3 Simulator & Radar Helpers (`src/lib/gada/simulator.ts` — Rama)
-
-- `compareSimulations(input, baseResult, overrideWeights)`: Runs personal simulation via `runGadaAnalysis` and maps each alternative to `SimulationComparisonRow` with $\Delta\text{Rank}$.
-- `buildRadarChartData(input, result, selectedAlternativeIds)`: Converts `reciprocatedMatrix` columns into $0$–$100$ normalized records ready for Recharts `RadarChart`.
-
-### 5.4 Report Exporter (`src/lib/gada/exporter.ts` — Anugerah)
+### 5.3 Report Exporter (`src/lib/gada/exporter.ts`)
 
 - `exportGadaOutputToExcel(input, output, filename?)`: Downloads a 4-sheet `.xlsx` report containing: (1) `Ranking & Scores`, (2) `Criteria Weights`, (3) `Respondent Consistency`, and (4) `Audit Matrices` (Cleaned & RO matrices).
 - `formatMatrixAsMarkdown(headers, rows)` & `formatMatrixAsTSV(headers, rows)`: Formats any audit matrix for one-click clipboard copy into academic reports or spreadsheets.
 
 ---
 
-## 6. User Interface Functional Specification (4-Tab Workspace)
+## 6. User Interface Functional Specification (Welcome Screen + 3-Tab Workspace)
 
-The root workspace (`src/app/page.tsx`, owned by **Stevanus**) holds active `GadaInput` state (initialized with `laundrySeedInput`), safely runs `runGadaAnalysis` on every state change, surfaces validation errors in a global banner without crashing the app, and renders a unified header (dataset title, live $S / M / N$ badges, "Reset UNSRI Preset", "Export Excel") above **4 main tabs**:
+The root workspace (`src/app/page.tsx`) starts with `gadaInput = null` on a neutral **Welcome Screen (`WelcomeScreen.tsx`)** offering two pure entry points: (1) Upload `.xlsx`/`.xls`/`.csv` (with Template download), or (2) Create Blank Dataset (`3 × 3`). Once a dataset is active, `page.tsx` evaluates `runGadaAnalysis` inside `useMemo`, surfaces validation errors via a global `Alert` without crashing, and renders a unified header (dataset title, live $S / M / N$ badges, `"Export Excel"`, and `"Ganti Dataset"`) above **3 main tabs**:
 
-1. **Tab 1 — Results & Charts (`ResultsView.tsx` — Stevanus):**
-   - Inputs: `result`, optional `onExportExcel` callback.
-   - Features: Top 3 podium cards (6-decimal $\hat{R}_j$ & tier badge), KPI summary strip (active criteria, excluded criteria, total alternatives, average $\sqrt{\alpha}$), Recharts horizontal bar chart of sorted criterion weights ($W_k\%$, color-coded `cost` vs `benefit`), and a searchable, tier-filterable ranking leaderboard table.
-2. **Tab 2 — Data & Excel Manager (`DataEditor.tsx` — Fathir):**
-   - Inputs: `input`, `result` (nullable), `error` (nullable), `onChange`, `onResetPreset`.
-   - Features: Drag-and-drop `.xlsx`/`.xls`/`.csv` upload, "Download Template (.xlsx)", "New Blank Dataset", "Reset UNSRI Preset", preprocessing setting controls (`autoDropZeroVariance`, `binaryTrueValue`, `binaryFalseValue`), transparent alerts listing `excludedCriteria` and `imputationLogs`, and 3 CRUD sub-tabs (Criteria Manager, Alternatives Matrix $S \times M$, Respondents Matrix $N \times M$).
-3. **Tab 3 — Simulator & Radar (`SimulatorView.tsx` — Rama):**
-   - Inputs: `input`, `baseResult`.
-   - Features: Interactive 1–5 sliders per active criterion displaying live simulated weight percentage $W_k^{\text{sim}}\%$ with "Reset to Group Consensus", side-by-side Group vs. Personal Rank table with color-coded $\Delta\text{Rank}$ badges, and an interactive Recharts `RadarChart` comparing 2–4 user-selected alternatives (defaulting to Top 3).
-4. **Tab 4 — Math Audit & Consistency (`AuditDiagnosticsView.tsx` — Anugerah):**
+1. **Tab 1 — Data & Kriteria (`DataEditor.tsx`):**
+   - Inputs: `input`, `result` (nullable), `onChange`.
+   - Features: Drag-and-drop `.xlsx`/`.xls`/`.csv` upload, `"Download Template"`, `"Dataset Baru (3×3)"`, dataset title input, and 3 CRUD sub-tabs (Kriteria, Alternatif $S \times M$, Responden $N \times M$).
+2. **Tab 2 — Hasil & Peringkat (`ResultsView.tsx`):**
+   - Inputs: `result`.
+   - Features: 3-card summary strip (Top #1 alternative, top criterion weight $W_k\%$, average group consistency $\sqrt{\bar{\alpha}}$), responsive Recharts horizontal bar charts for Top 10 alternatives ($\hat{R}_j$) and sorted criterion weights ($W_k\%$, color-coded `cost` vs `benefit`), and a searchable ranking leaderboard table showing 6-decimal $\hat{r}_j$, 6-decimal $\hat{R}_j$, and percentage score.
+3. **Tab 3 — Audit Perhitungan (`AuditDiagnosticsView.tsx`):**
    - Inputs: `input`, `result`.
-   - Features: Respondent Consistency Monitor (Min/Max/Avg $\sqrt{\alpha}$, warning count, searchable table of $s_i, |s_i|, \alpha_i, \sqrt{\alpha_i}$, status badges) + Step-by-Step Mathematical Audit Inspector with sub-tabs for all 6 matrices in `auditTrace`, formula subtitles, "Copy Markdown" / "Copy TSV" clipboard buttons, and "Export 4-Sheet Excel Report".
+   - Features: Automatic preprocessing logs (`excludedCriteria` and `imputationLogs`), Respondent Consistency Monitor (Min/Max/Avg $\sqrt{\alpha}$, warning count, searchable table of $s_i, |s_i|, \alpha_i, \sqrt{\alpha_i}$, status badges), and Step-by-Step Mathematical Audit Inspector with sub-tabs for all 6 matrices in `auditTrace`, formula subtitles, and `"Salin Markdown"` / `"Salin TSV"` clipboard buttons.

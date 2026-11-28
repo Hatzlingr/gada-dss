@@ -8,10 +8,7 @@ import {
   Download,
   FilePlus2,
   FileSpreadsheet,
-  Info,
   Plus,
-  RotateCcw,
-  Settings2,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -44,7 +41,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DEFAULT_SLIDER_SCORE } from "@/lib/gada/constants";
+import { DEFAULT_LIKERT_SCORE } from "@/lib/gada/constants";
 import {
   createBlankGadaInput,
   downloadTemplateWorkbook,
@@ -57,7 +54,6 @@ import type {
   ExcludedCriterion,
   GadaInput,
   GadaOutput,
-  ImputationLog,
   ImputationStrategy,
   RawCellValue,
   RespondentItem,
@@ -66,9 +62,7 @@ import type {
 export interface DataEditorProps {
   input: GadaInput;
   result: GadaOutput | null;
-  error: string | null;
   onChange: (next: GadaInput) => void;
-  onResetPreset: () => void;
 }
 
 const CRITERION_TYPE_LABELS: Record<CriterionType, string> = {
@@ -94,7 +88,10 @@ const IMPUTATION_STRATEGIES: readonly ImputationStrategy[] = [
 
 const DEFAULT_CUSTOM_PENALTY = 1000;
 
-function generateUniqueId(prefix: string, existingIds: ReadonlySet<string>): string {
+function generateUniqueId(
+  prefix: string,
+  existingIds: ReadonlySet<string>
+): string {
   let index = existingIds.size + 1;
   while (existingIds.has(`${prefix}${index}`)) {
     index += 1;
@@ -114,7 +111,9 @@ function isCriterionType(value: string | null): value is CriterionType {
   return value === "cost" || value === "benefit";
 }
 
-function isImputationStrategy(value: string | null): value is ImputationStrategy {
+function isImputationStrategy(
+  value: string | null
+): value is ImputationStrategy {
   return (
     value === "penalty_max" ||
     value === "min_value" ||
@@ -131,33 +130,28 @@ function formatRawDisplay(value: RawCellValue): string {
 }
 
 interface NumberDraftInputProps {
-  id?: string;
   value: number;
   onCommit: (nextValue: number) => void;
   ariaLabel: string;
   className?: string;
   min?: number;
-  step?: string;
 }
 
 function NumberDraftInput({
-  id,
   value,
   onCommit,
   ariaLabel,
   className,
   min,
-  step = "any",
 }: NumberDraftInputProps) {
   const [draft, setDraft] = useState<string | null>(null);
   const displayValue = draft !== null ? draft : String(value);
 
   return (
     <Input
-      id={id}
       type="number"
       min={min}
-      step={step}
+      step="any"
       value={displayValue}
       aria-label={ariaLabel}
       className={className}
@@ -178,13 +172,7 @@ function NumberDraftInput({
   );
 }
 
-export function DataEditor({
-  input,
-  result,
-  error,
-  onChange,
-  onResetPreset,
-}: DataEditorProps) {
+export function DataEditor({ input, result, onChange }: DataEditorProps) {
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -236,25 +224,13 @@ export function DataEditor({
   const handleCreateBlankDataset = () => {
     setImportError(null);
     setImportSuccess(
-      "Dataset kosong baru (3 alternatif × 3 kriteria × 2 responden) telah dimuat."
+      "Dataset starter baru (3 alternatif × 3 kriteria × 2 responden) telah dimuat."
     );
     onChange(createBlankGadaInput());
   };
 
-  const handleResetPresetClick = () => {
-    setImportError(null);
-    setImportSuccess(null);
-    onResetPreset();
-  };
-
   return (
     <div className="space-y-6">
-      <ValidationAndAuditAlerts
-        error={error}
-        excludedCriteria={result?.excludedCriteria ?? []}
-        imputationLogs={result?.imputationLogs ?? []}
-      />
-
       <SpreadsheetToolbarCard
         datasetName={input.datasetName ?? ""}
         isImporting={isImporting}
@@ -269,17 +245,6 @@ export function DataEditor({
         onFileSelected={handleImportFile}
         onDownloadTemplate={downloadTemplateWorkbook}
         onNewBlankDataset={handleCreateBlankDataset}
-        onResetPreset={handleResetPresetClick}
-      />
-
-      <PreprocessingOptionsCard
-        options={input.options}
-        onOptionsChange={(nextOptions) =>
-          onChange({
-            ...input,
-            options: nextOptions,
-          })
-        }
       />
 
       <Card>
@@ -291,13 +256,12 @@ export function DataEditor({
                 Editor Matriks Keputusan Dinamis
               </CardTitle>
               <CardDescription>
-                Kelola konfigurasi kriteria, matriks performa alternatif (S × M), dan skor kepentingan responden (N × M) secara langsung.
+                Kelola konfigurasi kriteria, matriks alternatif (S × M), dan
+                skor kepentingan responden (N × M) secara langsung.
               </CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline">
-                {input.criteria.length} Kriteria
-              </Badge>
+              <Badge variant="outline">{input.criteria.length} Kriteria</Badge>
               <Badge variant="outline">
                 {input.alternatives.length} Alternatif
               </Badge>
@@ -353,92 +317,6 @@ export function DataEditor({
   );
 }
 
-function ValidationAndAuditAlerts({
-  error,
-  excludedCriteria,
-  imputationLogs,
-}: {
-  error: string | null;
-  excludedCriteria: readonly ExcludedCriterion[];
-  imputationLogs: readonly ImputationLog[];
-}) {
-  if (
-    error === null &&
-    excludedCriteria.length === 0 &&
-    imputationLogs.length === 0
-  ) {
-    return null;
-  }
-
-  return (
-    <section aria-label="Status Validasi dan Audit Preprocessing" className="space-y-3">
-      {error !== null ? (
-        <Alert variant="destructive">
-          <AlertCircle className="size-4" aria-hidden="true" />
-          <AlertTitle>Validasi Matriks GADA Gagal</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {excludedCriteria.length > 0 ? (
-        <Alert>
-          <Info className="size-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-          <AlertTitle>
-            {excludedCriteria.length} Kriteria Dieliminasi Otomatis oleh Layer A
-          </AlertTitle>
-          <AlertDescription>
-            <ul className="mt-1 list-disc space-y-1 pl-4 text-xs">
-              {excludedCriteria.map((item) => (
-                <li key={item.criterionId}>
-                  <span className="font-medium text-foreground">
-                    [{item.code}] {item.name}
-                  </span>{" "}
-                  ({item.reason === "zero_variance" ? "Varians Nol" : "Nonaktif"}):{" "}
-                  {item.detail}
-                </li>
-              ))}
-            </ul>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {imputationLogs.length > 0 ? (
-        <Alert>
-          <Info className="size-4 text-sky-600 dark:text-sky-400" aria-hidden="true" />
-          <AlertTitle>
-            {imputationLogs.length} Sel Kosong Diimputasi Secara Transparan
-          </AlertTitle>
-          <AlertDescription>
-            <ul className="mt-1 grid grid-cols-1 gap-1 text-xs md:grid-cols-2">
-              {imputationLogs.map((log) => (
-                <li
-                  key={`${log.alternativeId}:${log.criterionId}`}
-                  className="rounded-md bg-muted/40 px-2 py-1"
-                >
-                  <span className="font-medium text-foreground">
-                    {log.alternativeName}
-                  </span>{" "}
-                  · [{log.criterionCode}] {log.criterionName}:{" "}
-                  <code className="font-mono text-muted-foreground">
-                    {formatRawDisplay(log.rawValue) || "(kosong)"}
-                  </code>{" "}
-                  →{" "}
-                  <span className="font-mono font-semibold text-foreground">
-                    {log.imputedValue}
-                  </span>{" "}
-                  <span className="text-muted-foreground">
-                    ({log.strategy})
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-    </section>
-  );
-}
-
 function SpreadsheetToolbarCard({
   datasetName,
   isImporting,
@@ -448,7 +326,6 @@ function SpreadsheetToolbarCard({
   onFileSelected,
   onDownloadTemplate,
   onNewBlankDataset,
-  onResetPreset,
 }: {
   datasetName: string;
   isImporting: boolean;
@@ -458,7 +335,6 @@ function SpreadsheetToolbarCard({
   onFileSelected: (file: File) => void;
   onDownloadTemplate: () => void;
   onNewBlankDataset: () => void;
-  onResetPreset: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const datasetInputId = useId();
@@ -478,11 +354,15 @@ function SpreadsheetToolbarCard({
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
-              <FileSpreadsheet className="size-4 text-primary" aria-hidden="true" />
-              Impor Excel / CSV &amp; Manajemen Dataset
+              <FileSpreadsheet
+                className="size-4 text-primary"
+                aria-hidden="true"
+              />
+              Impor Excel / CSV &amp; Pengaturan Dataset
             </CardTitle>
             <CardDescription>
-              Mendukung workbook Survei Kelompok 6 (Data Laundry + Bobot Kriteria) maupun file .xlsx, .xls, atau .csv dari domain apa pun.
+              Unggah file .xlsx, .xls, atau .csv dari domain apa pun untuk
+              memperbarui matriks keputusan.
             </CardDescription>
           </div>
 
@@ -495,7 +375,7 @@ function SpreadsheetToolbarCard({
               className="gap-1.5"
             >
               <Download className="size-3.5" aria-hidden="true" />
-              Download Template (.xlsx)
+              Download Template
             </Button>
             <Button
               type="button"
@@ -505,17 +385,7 @@ function SpreadsheetToolbarCard({
               className="gap-1.5"
             >
               <FilePlus2 className="size-3.5" aria-hidden="true" />
-              New Blank Dataset
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onResetPreset}
-              className="gap-1.5"
-            >
-              <RotateCcw className="size-3.5" aria-hidden="true" />
-              Reset UNSRI Preset
+              Dataset Baru (3×3)
             </Button>
           </div>
         </div>
@@ -529,10 +399,10 @@ function SpreadsheetToolbarCard({
               id={datasetInputId}
               value={datasetName}
               onChange={(event) => onDatasetNameChange(event.target.value)}
-              placeholder="Contoh: Pemilihan Kos Terbaik UNSRI"
+              placeholder="Contoh: Pemilihan Laptop Terbaik"
             />
             <p className="text-xs text-muted-foreground">
-              Judul ini tampil di header aplikasi dan laporan ekspor Excel.
+              Ditampilkan pada header aplikasi dan nama file ekspor Excel.
             </p>
           </div>
 
@@ -579,7 +449,10 @@ function SpreadsheetToolbarCard({
                   : "border-border bg-muted/20 hover:border-primary/50 hover:bg-muted/40"
               }`}
             >
-              <Upload className="size-5 text-muted-foreground" aria-hidden="true" />
+              <Upload
+                className="size-5 text-muted-foreground"
+                aria-hidden="true"
+              />
               <div className="space-y-0.5">
                 <p className="text-sm font-medium text-foreground">
                   {isImporting
@@ -587,7 +460,8 @@ function SpreadsheetToolbarCard({
                     : "Seret & lepas file .xlsx, .xls, atau .csv ke sini, atau klik untuk memilih"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Sheet 1: Alternatif (Kolom 1 = Nama, Kolom 2 Alamat/Deskripsi opsional, sisanya Kriteria). Sheet 2 opsional: Responden.
+                  Sheet 1: Alternatif &amp; Kriteria. Sheet 2 opsional: Skor
+                  Responden (1–5).
                 </p>
               </div>
             </div>
@@ -612,93 +486,6 @@ function SpreadsheetToolbarCard({
             <AlertDescription>{importSuccess}</AlertDescription>
           </Alert>
         ) : null}
-      </CardContent>
-    </Card>
-  );
-}
-
-function PreprocessingOptionsCard({
-  options,
-  onOptionsChange,
-}: {
-  options: GadaInput["options"];
-  onOptionsChange: (nextOptions: GadaInput["options"]) => void;
-}) {
-  const trueId = useId();
-  const falseId = useId();
-
-  return (
-    <Card>
-      <CardHeader className="border-b pb-4">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Settings2 className="size-4 text-primary" aria-hidden="true" />
-          Pengaturan Preprocessing Layer A
-        </CardTitle>
-        <CardDescription>
-          Konfigurasi eliminasi otomatis varians nol serta pemetaan nilai biner (&ldquo;Ya&rdquo;/&ldquo;Yes&rdquo;/&ldquo;True&rdquo; vs &ldquo;Tidak&rdquo;/&ldquo;No&rdquo;/&ldquo;False&rdquo;).
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent className="pt-4">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium">
-                Auto-Drop Varians Nol
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Eliminasi kriteria yang bernilai identik di semua alternatif.
-              </p>
-            </div>
-            <Button
-              type="button"
-              role="switch"
-              aria-checked={options.autoDropZeroVariance}
-              variant={options.autoDropZeroVariance ? "default" : "outline"}
-              size="sm"
-              onClick={() =>
-                onOptionsChange({
-                  ...options,
-                  autoDropZeroVariance: !options.autoDropZeroVariance,
-                })
-              }
-            >
-              {options.autoDropZeroVariance ? "Aktif" : "Nonaktif"}
-            </Button>
-          </div>
-
-          <div className="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3">
-            <Label htmlFor={trueId}>Nilai Biner Benar (Ya / Yes)</Label>
-            <NumberDraftInput
-              id={trueId}
-              value={options.binaryTrueValue}
-              min={0.0001}
-              ariaLabel="Nilai numerik untuk biner benar"
-              onCommit={(nextVal) =>
-                onOptionsChange({
-                  ...options,
-                  binaryTrueValue: nextVal,
-                })
-              }
-            />
-          </div>
-
-          <div className="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3">
-            <Label htmlFor={falseId}>Nilai Biner Salah (Tidak / No)</Label>
-            <NumberDraftInput
-              id={falseId}
-              value={options.binaryFalseValue}
-              min={0.0001}
-              ariaLabel="Nilai numerik untuk biner salah"
-              onCommit={(nextVal) =>
-                onOptionsChange({
-                  ...options,
-                  binaryFalseValue: nextVal,
-                })
-              }
-            />
-          </div>
-        </div>
       </CardContent>
     </Card>
   );
@@ -742,7 +529,7 @@ function CriteriaCrudTab({
     for (const resp of input.respondents) {
       nextRespScores[resp.id] = {
         ...input.respondentScores[resp.id],
-        [id]: DEFAULT_SLIDER_SCORE,
+        [id]: DEFAULT_LIKERT_SCORE,
       };
     }
 
@@ -766,7 +553,10 @@ function CriteriaCrudTab({
     });
   };
 
-  const handleTypeChange = (criterion: CriterionConfig, nextType: string | null) => {
+  const handleTypeChange = (
+    criterion: CriterionConfig,
+    nextType: string | null
+  ) => {
     if (!isCriterionType(nextType)) {
       return;
     }
@@ -822,8 +612,9 @@ function CriteriaCrudTab({
     <div className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-muted-foreground">
-          Mengubah tipe ke <span className="font-medium text-foreground">Cost</span> otomatis mengatur strategi missing ke{" "}
-          <code className="font-mono">penalty_max</code>; tipe{" "}
+          Kriteria bertipe <span className="font-medium text-foreground">Cost</span>{" "}
+          (lebih kecil lebih baik) otomatis mengatur strategi nilai kosong ke{" "}
+          <code className="font-mono">penalty_max</code>;{" "}
           <span className="font-medium text-foreground">Benefit</span> ke{" "}
           <code className="font-mono">min_value</code>.
         </p>
@@ -859,7 +650,8 @@ function CriteriaCrudTab({
                 colSpan={7}
                 className="py-8 text-center text-sm text-muted-foreground"
               >
-                Belum ada kriteria. Klik &ldquo;Tambah Kriteria&rdquo; untuk memulai.
+                Belum ada kriteria. Klik &ldquo;Tambah Kriteria&rdquo; untuk
+                memulai.
               </TableCell>
             </TableRow>
           ) : (
@@ -901,7 +693,7 @@ function CriteriaCrudTab({
                           className="border-amber-300 bg-amber-500/10 text-[11px] text-amber-700 dark:border-amber-500/30 dark:text-amber-300"
                         >
                           {excluded.reason === "zero_variance"
-                            ? "Auto-Drop: Varians Nol"
+                            ? "Tereliminasi: Varians Nol"
                             : "Nonaktif"}
                         </Badge>
                       ) : null}
@@ -1099,12 +891,12 @@ function AlternativesCrudTab({
     <div className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-muted-foreground">
-          Sel menerima angka, satuan (<code className="font-mono">800 m</code>,{" "}
+          Sel menerima angka positif, satuan (<code className="font-mono">800 m</code>,{" "}
           <code className="font-mono">4.5 km</code>,{" "}
           <code className="font-mono">3 hari</code>), rentang jam (
           <code className="font-mono">08.00 - 18.00</code>), biner (
           <code className="font-mono">Ya</code>/<code className="font-mono">Tidak</code>
-          ), atau <code className="font-mono">-</code> untuk imputasi.
+          ), atau <code className="font-mono">-</code> untuk imputasi otomatis.
         </p>
         <Button
           type="button"
@@ -1124,7 +916,7 @@ function AlternativesCrudTab({
           <TableRow>
             <TableHead className="w-12">#</TableHead>
             <TableHead className="min-w-44">Nama Alternatif</TableHead>
-            <TableHead className="min-w-40">Alamat / Catatan</TableHead>
+            <TableHead className="min-w-40">Keterangan / Alamat</TableHead>
             {input.criteria.map((criterion) => {
               const excluded = excludedById.get(criterion.id);
               return (
@@ -1161,7 +953,8 @@ function AlternativesCrudTab({
                 colSpan={input.criteria.length + 4}
                 className="py-8 text-center text-sm text-muted-foreground"
               >
-                Belum ada alternatif. Klik &ldquo;Tambah Alternatif&rdquo; untuk menambah baris.
+                Belum ada alternatif. Klik &ldquo;Tambah Alternatif&rdquo; untuk
+                menambah baris.
               </TableCell>
             </TableRow>
           ) : (
@@ -1191,7 +984,7 @@ function AlternativesCrudTab({
                       })
                     }
                     placeholder="Opsional..."
-                    aria-label={`Alamat atau catatan ${alternative.name}`}
+                    aria-label={`Keterangan ${alternative.name}`}
                     className="min-w-36"
                   />
                 </TableCell>
@@ -1269,7 +1062,7 @@ function RespondentsCrudTab({
 
     const defaultScores: Record<string, number> = {};
     for (const criterion of input.criteria) {
-      defaultScores[criterion.id] = DEFAULT_SLIDER_SCORE;
+      defaultScores[criterion.id] = DEFAULT_LIKERT_SCORE;
     }
 
     onChange({
@@ -1282,14 +1075,11 @@ function RespondentsCrudTab({
     });
   };
 
-  const handleUpdateRespondentMeta = (
-    respId: string,
-    patch: Partial<RespondentItem>
-  ) => {
+  const handleUpdateRespondentName = (respId: string, name: string) => {
     onChange({
       ...input,
       respondents: input.respondents.map((resp) =>
-        resp.id === respId ? { ...resp, ...patch } : resp
+        resp.id === respId ? { ...resp, name } : resp
       ),
     });
   };
@@ -1326,7 +1116,8 @@ function RespondentsCrudTab({
     <div className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-muted-foreground">
-          Setiap skor kepentingan responden harus bernilai positif (&gt; 0), misalnya skala Likert 1–5.
+          Setiap skor kepentingan responden harus bernilai positif (&gt; 0),
+          misalnya skala Likert 1–5.
         </p>
         <Button
           type="button"
@@ -1345,10 +1136,7 @@ function RespondentsCrudTab({
         <TableHeader>
           <TableRow>
             <TableHead className="w-12">#</TableHead>
-            <TableHead className="min-w-40">Nama Responden</TableHead>
-            <TableHead className="min-w-40">Fakultas</TableHead>
-            <TableHead className="min-w-36">Jurusan / Prodi</TableHead>
-            <TableHead className="w-24">Angkatan</TableHead>
+            <TableHead className="min-w-48">Nama Responden / Penilai</TableHead>
             {input.criteria.map((criterion) => {
               const excluded = excludedById.get(criterion.id);
               return (
@@ -1357,7 +1145,7 @@ function RespondentsCrudTab({
                   className={`min-w-24 ${excluded ? "opacity-60" : ""}`}
                 >
                   <div className="font-mono text-xs">{criterion.code}</div>
-                  <div className="max-w-24 truncate text-[11px] font-normal text-muted-foreground">
+                  <div className="max-w-28 truncate text-[11px] font-normal text-muted-foreground">
                     {criterion.name}
                   </div>
                 </TableHead>
@@ -1370,10 +1158,11 @@ function RespondentsCrudTab({
           {input.respondents.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={input.criteria.length + 6}
+                colSpan={input.criteria.length + 3}
                 className="py-8 text-center text-sm text-muted-foreground"
               >
-                Belum ada responden. Klik &ldquo;Tambah Responden&rdquo; untuk menambah penilai.
+                Belum ada responden. Klik &ldquo;Tambah Responden&rdquo; untuk
+                menambah penilai.
               </TableCell>
             </TableRow>
           ) : (
@@ -1386,69 +1175,19 @@ function RespondentsCrudTab({
                   <Input
                     value={respondent.name}
                     onChange={(event) =>
-                      handleUpdateRespondentMeta(respondent.id, {
-                        name: event.target.value,
-                      })
+                      handleUpdateRespondentName(
+                        respondent.id,
+                        event.target.value
+                      )
                     }
                     aria-label={`Nama responden ${rowIndex + 1}`}
-                    className="min-w-36"
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    value={respondent.faculty ?? ""}
-                    onChange={(event) =>
-                      handleUpdateRespondentMeta(respondent.id, {
-                        faculty: event.target.value,
-                      })
-                    }
-                    placeholder="Opsional..."
-                    aria-label={`Fakultas ${respondent.name}`}
-                    className="min-w-36"
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    value={respondent.major ?? ""}
-                    onChange={(event) =>
-                      handleUpdateRespondentMeta(respondent.id, {
-                        major: event.target.value,
-                      })
-                    }
-                    placeholder="Opsional..."
-                    aria-label={`Jurusan ${respondent.name}`}
-                    className="min-w-32"
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    value={
-                      respondent.batch !== undefined
-                        ? String(respondent.batch)
-                        : ""
-                    }
-                    onChange={(event) => {
-                      const raw = event.target.value.trim();
-                      if (raw === "") {
-                        handleUpdateRespondentMeta(respondent.id, {
-                          batch: undefined,
-                        });
-                        return;
-                      }
-                      const parsed = Number(raw);
-                      handleUpdateRespondentMeta(respondent.id, {
-                        batch: Number.isFinite(parsed) ? parsed : raw,
-                      });
-                    }}
-                    placeholder="2024"
-                    aria-label={`Angkatan ${respondent.name}`}
-                    className="w-24 font-mono text-xs"
+                    className="min-w-44"
                   />
                 </TableCell>
                 {input.criteria.map((criterion) => {
                   const score =
                     input.respondentScores[respondent.id]?.[criterion.id] ??
-                    DEFAULT_SLIDER_SCORE;
+                    DEFAULT_LIKERT_SCORE;
                   const isExcluded = excludedById.has(criterion.id);
 
                   return (

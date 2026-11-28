@@ -199,216 +199,36 @@ export const laundrySeedInput: GadaInput = {
   }
 ],
   respondents: [
-  {
-    "id": "resp-1",
-    "name": "R",
-    "faculty": "Fakultas Matematika dan Ilmu Pengetahuan Alam",
-    "major": "Biologi",
-    "batch": 2022
-  },
-  {
-    "id": "resp-2",
-    "name": "Responden #2",
-    "faculty": "Fakultas Ilmu Komputer",
-    "major": "Sistem informasi",
-    "batch": 2024
-  },
-  {
-    "id": "resp-3",
-    "name": "Revita Agustin",
-    "faculty": "Fakultas Matematika dan Ilmu Pengetahuan Alam",
-    "major": "Kimia",
-    "batch": 2026
-  },
-  {
-    "id": "resp-4",
-    "name": "Responden #4",
-    "faculty": "Fakultas Ilmu Sosial dan Ilmu Politik",
-    "major": "Administrasi publik",
-    "batch": 2026
-  },
-  {
-    "id": "resp-5",
-    "name": "Muhammad Ridho Saputra",
-    "faculty": "Fakultas Teknik",
-    "major": "Teknik Kimia",
-    "batch": 2024
-  },
-  {
-    "id": "resp-6",
-    "name": "Anis",
-    "faculty": "Fakultas Keguruan dan Ilmu pendidikan",
-    "major": "PGpaud",
-    "batch": 2025
-  },
-  {
-    "id": "resp-7",
-    "name": "Fransisca Olivia",
-    "faculty": "Fakultas Ilmu Komputer",
-    "major": "Sistem Informasi",
-    "batch": 2026
-  },
-  {
-    "id": "resp-8",
-    "name": "marit",
-    "faculty": "Fakultas Ilmu Sosial dan Ilmu Politik",
-    "major": "hubungan internasional",
-    "batch": 2025
-  },
-  {
-    "id": "resp-9",
-    "name": "Fanya Paulina",
-    "faculty": "Fakultas Kesehatan Masyarakat",
-    "major": "Kesehatan Lingkungan",
-    "batch": 2024
-  },
-  {
-    "id": "resp-10",
-    "name": "Keiza Caroline",
-    "faculty": "Fakultas Kesehatan Masyarakat",
-    "major": "Ilmu Kesehatan Masyarakat",
-    "batch": 2024
-  },
-  {
-    "id": "resp-11",
-    "name": "Cici",
-    "faculty": "Fakultas Ilmu Sosial dan Ilmu Politik",
-    "major": "Administrasi Publik",
-    "batch": 2024
-  },
-  {
-    "id": "resp-12",
-    "name": "Responden #12",
-    "faculty": "Fakultas Kesehatan Masyarakat",
-    "major": "Kesehatan Masyarakat",
-    "batch": 2024
-  },
-  {
-    "id": "resp-13",
-    "name": "Azizul manal Gaumalanga",
-    "faculty": "Fakultas Ilmu Komputer",
-    "major": "teknik informatika",
-    "batch": 2024
-  },
-  {
-    "id": "resp-14",
-    "name": "Shaula Kristiani",
-    "faculty": "Fakultas Ilmu Sosial dan Ilmu Politik",
-    "major": "Ilmu Komunikasi",
-    "batch": 2024
-  },
-  {
-    "id": "resp-15",
-    "name": "Responden #15",
-    "faculty": "Fakultas Keguruan dan Ilmu pendidikan",
-    "major": "PGSD",
-    "batch": 2026
-  },
-  {
-    "id": "resp-16",
-    "name": "naysa",
-    "faculty": "Fakultas Pertanian",
-    "major": "thi",
-    "batch": 2026
-  },
-  {
-    "id": "resp-17",
-    "name": "adha",
-    "faculty": "Fakultas Ilmu Komputer",
-    "major": "teknik informatika",
-    "batch": 2024
-  },
-  {
-    "id": "resp-18",
-    "name": "Olin",
-    "faculty": "Fakultas Keguruan dan Ilmu pendidikan",
-    "major": "Pendidikan masyarakat",
-    "batch": 2023
-  },
-  {
-    "id": "resp-19",
-    "name": "Geb",
-    "faculty": "Fakultas Pertanian",
-    "major": "THP",
-    "batch": 2024
-  },
-  {
-    "id": "resp-20",
-    "name": "Dea Arisa",
-    "faculty": "Fakultas Pertanian",
-    "major": "Teknologi Hasil Pertanian",
-    "batch": 2024
-  },
-  {
-    "id": "resp-21",
-    "name": "Nabila Dwi Putri",
-    "faculty": "Fakultas Pertanian",
-    "major": "Teknologi hasil pertanian",
-    "batch": 2024
-  },
-  {
-    "id": "resp-22",
-    "name": "Sartika",
-    "faculty": "Fakultas Ilmu Komputer",
-    "major": "KA",
-    "batch": 2024
-  },
-  {
-    "id": "resp-23",
-    "name": "Responden #23",
-    "faculty": "Fakultas Pertanian",
-    "major": "Peternakan",
-    "batch": 2026
-  },
-  {
-    "id": "resp-24",
-    "name": "M. Irpan Arhandi",
-    "faculty": "Fakultas Keguruan dan Ilmu pendidikan",
-    "major": "Pendidikan Ekonomi",
-    "batch": 2024
-  },
-  {
-    "id": "resp-25",
-    "name": "Heru",
-    "faculty": "Fakultas Keguruan dan Ilmu pendidikan",
-    "major": "PTM",
-    "batch": 2024
-  },
-  {
-    "id": "resp-26",
-    "name": "Mega Wati",
-    "faculty": "Fakultas Pertanian",
-    "major": "Teknik pertanian",
-    "batch": 2024
-  },
-  {
-    "id": "resp-27",
-    "name": "Responden #27",
-    "faculty": "Fakultas Keguruan dan Ilmu pendidikan",
-    "major": "Pendidikan bio",
-    "batch": 2023
-  },
-  {
-    "id": "resp-28",
-    "name": "Nabila Anggraini",
-    "faculty": "Fakultas Pertanian",
-    "major": "Teknologi hasil pertanian",
-    "batch": 2024
-  },
-  {
-    "id": "resp-29",
-    "name": "Revan",
-    "faculty": "Fakultas Matematika dan Ilmu Pengetahuan Alam",
-    "major": "Matematika",
-    "batch": 2024
-  },
-  {
-    "id": "resp-30",
-    "name": "Al",
-    "faculty": "Fakultas Keguruan dan Ilmu pendidikan",
-    "major": "Matematika",
-    "batch": 2026
-  }
+  { "id": "resp-1", "name": "R" },
+  { "id": "resp-2", "name": "Responden #2" },
+  { "id": "resp-3", "name": "Revita Agustin" },
+  { "id": "resp-4", "name": "Responden #4" },
+  { "id": "resp-5", "name": "Muhammad Ridho Saputra" },
+  { "id": "resp-6", "name": "Anis" },
+  { "id": "resp-7", "name": "Fransisca Olivia" },
+  { "id": "resp-8", "name": "marit" },
+  { "id": "resp-9", "name": "Fanya Paulina" },
+  { "id": "resp-10", "name": "Keiza Caroline" },
+  { "id": "resp-11", "name": "Cici" },
+  { "id": "resp-12", "name": "Responden #12" },
+  { "id": "resp-13", "name": "Azizul manal Gaumalanga" },
+  { "id": "resp-14", "name": "Shaula Kristiani" },
+  { "id": "resp-15", "name": "Responden #15" },
+  { "id": "resp-16", "name": "naysa" },
+  { "id": "resp-17", "name": "adha" },
+  { "id": "resp-18", "name": "Olin" },
+  { "id": "resp-19", "name": "Geb" },
+  { "id": "resp-20", "name": "Dea Arisa" },
+  { "id": "resp-21", "name": "Nabila Dwi Putri" },
+  { "id": "resp-22", "name": "Sartika" },
+  { "id": "resp-23", "name": "Responden #23" },
+  { "id": "resp-24", "name": "M. Irpan Arhandi" },
+  { "id": "resp-25", "name": "Heru" },
+  { "id": "resp-26", "name": "Mega Wati" },
+  { "id": "resp-27", "name": "Responden #27" },
+  { "id": "resp-28", "name": "Nabila Anggraini" },
+  { "id": "resp-29", "name": "Revan" },
+  { "id": "resp-30", "name": "Al" }
 ],
   alternativeValues: {
   "alt-1": {

@@ -1,36 +1,84 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Dynamic GADA Decision Support System (DSS)
 
-## Getting Started
+Implementasi web Sistem Pendukung Keputusan (SPK) multi-kriteria yang **universal (domain-agnostik)** berbasis metode **Grey Absolute Decision Analysis (GADA)** (Javed, Mahmoudi, & Liu, 2020; diadaptasi oleh Kelompok 6, Teknik Informatika, Universitas Sriwijaya, 2026).
 
-First, run the development server:
+Aplikasi ini dapat digunakan untuk mengevaluasi **dataset apa saja** ($S \ge 1$ alternatif, $M \ge 2$ kriteria aktif, $N \ge 1$ responden) melalui unggahan `.xlsx`/`.xls`/`.csv` sesuai template maupun input manual langsung di editor.
+
+---
+
+## Fitur Utama
+
+1. **Layar Awal Netral & Input Fleksibel:**
+   - **Unggah Excel / CSV:** Mendukung file 1-sheet (`.csv`/`.xlsx`) maupun 2-sheet (`Alternatif` + `Responden`) dengan deteksi opsional tag tipe `(Cost)` / `(Benefit)` pada header kriteria.
+   - **Template & Input Manual:** Tersedia tombol *Download Template (.xlsx)* (`Template_Dataset_GADA.xlsx`) dan pembuat matriks starter `3 × 3` untuk langsung diisi di editor.
+2. **Preprocessing Dua Lapis Otomatis (`src/lib/gada/engine.ts`):**
+   - Normalisasi satuan jarak (`m`/`km`), durasi/berat (`hari`, `kg`, `Rp`), rentang jam buka (`07.00 - 21.30` → `14.5`), serta data biner (`Ya = 5`, `Tidak = 1`).
+   - Imputasi nilai kosong per kriteria (`penalty_max`, `min_value`, `mean`, `custom_penalty`).
+   - Eliminasi otomatis kriteria bernilai seragam (varians nol), seperti `Pembayaran QRIS` pada studi kasus laundry.
+   - Validasi ketat nilai $> 0$ dan agregasi geometrik dalam ruang logaritma (*log-space*).
+3. **Hasil, Visualisasi & Audit Matematis 6 Tahap:**
+   - Grafik interaktif Recharts untuk **Bobot Konsensus Kriteria ($W_k\%$)** dan **Top Alternatif ($\hat{R}_j$)**.
+   - Tabel peringkat lengkap ($\hat{r}_j$, $\hat{R}_j$, persentase skor).
+   - Monitor Konsistensi Responden ($s_i$, $|s_i|$, $\alpha_i$, $\sqrt{\alpha_i}$) dan Inspektor 6 Matriks Audit (`Cleaned`, `Beta`, `Zero-Point`, `AGRPC`, `Theta`, `RO`) dengan tombol salin Markdown/TSV.
+   - **Export Excel 4-Sheet** (`Ranking & Scores`, `Criteria Weights`, `Respondent Consistency`, `Audit Matrices`).
+
+---
+
+## Tech Stack
+
+- **Framework:** Next.js 16 (App Router) + React 19 + TypeScript (`strict: true`, `noUncheckedIndexedAccess: true`)
+- **UI & Styling:** Tailwind CSS v4 + `shadcn/ui` + `lucide-react`
+- **Visualisasi:** `recharts`
+- **Spreadsheet I/O:** SheetJS (`xlsx`)
+- **Testing:** `vitest`
+
+---
+
+## Menjalankan Secara Lokal
 
 ```bash
+# 1. Install dependensi
+npm install
+
+# 2. Jalankan development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Buka [http://localhost:3000](http://localhost:3000) di browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Perintah Verifikasi
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run typecheck   # Validasi TypeScript (tsc --noEmit)
+npm run test        # Menjalankan 15 unit test & benchmark ground-truth (vitest run)
+npm run lint        # Pemeriksaan ESLint
+npm run build       # Build produksi Next.js
+```
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## Struktur Direktori Inti
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```text
+src/
+├── app/
+│   ├── globals.css
+│   ├── layout.tsx
+│   └── page.tsx                          # Shell welcome screen & workspace 3 tab
+├── components/gada/
+│   ├── WelcomeScreen.tsx                 # Layar awal netral (Upload / Manual / Studi Kasus)
+│   ├── DataEditor.tsx                    # Impor spreadsheet & editor CRUD dinamis
+│   ├── ResultsView.tsx                   # Ringkasan hasil, grafik, & tabel peringkat
+│   └── AuditDiagnosticsView.tsx          # Konsistensi AGRPC & inspektor matriks 6 tahap
+├── data/
+│   └── laundry-seed.ts                   # Fixture studi kasus untuk unit test benchmark
+└── lib/gada/
+    ├── types.ts                          # Kontrak tipe domain GADA
+    ├── constants.ts                      # Konstanta & ambang batas terpusat
+    ├── engine.ts                         # Mesin perhitungan & preprocessing GADA
+    ├── excel.ts                          # Parser Excel/CSV & generator template
+    └── exporter.ts                       # Ekspor laporan Excel 4-sheet & Markdown/TSV
+tests/
+└── gada/
+    └── laundry.test.ts                   # Benchmark ground-truth & uji edge-case
+```
