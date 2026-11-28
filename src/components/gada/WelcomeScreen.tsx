@@ -1,14 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import {
-  AlertCircle,
-  Download,
-  FilePlus2,
-  FileSpreadsheet,
-  Upload,
-} from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Download, FilePlus2, FileSpreadsheet } from "lucide-react";
+import { SpreadsheetDropzone } from "@/components/gada/SpreadsheetDropzone";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,10 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  downloadTemplateWorkbook,
-  parseSpreadsheetToGadaInput,
-} from "@/lib/gada/excel";
+import { downloadTemplateWorkbook } from "@/lib/gada/excel";
 import type { GadaInput } from "@/lib/gada/types";
 
 export interface WelcomeScreenProps {
@@ -54,33 +44,6 @@ export function WelcomeScreen({
   onDatasetReady,
   onStartBlank,
 }: WelcomeScreenProps) {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-
-  const handleFiles = async (files: FileList | null) => {
-    const file = files?.[0];
-    if (!file) {
-      return;
-    }
-
-    setIsImporting(true);
-    setImportError(null);
-    try {
-      const parsed = await parseSpreadsheetToGadaInput(file);
-      onDatasetReady(parsed, "results");
-    } catch (err) {
-      setImportError(
-        err instanceof Error
-          ? err.message
-          : `Gagal membaca file "${file.name}".`
-      );
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
   return (
     <div className="mx-auto max-w-5xl space-y-6 py-4">
       <div className="space-y-2 text-center">
@@ -96,14 +59,6 @@ export function WelcomeScreen({
           dan diaudit dengan metode GADA.
         </p>
       </div>
-
-      {importError !== null ? (
-        <Alert variant="destructive">
-          <AlertCircle className="size-4" aria-hidden="true" />
-          <AlertTitle>Gagal Mengimpor Spreadsheet</AlertTitle>
-          <AlertDescription>{importError}</AlertDescription>
-        </Alert>
-      ) : null}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card className="flex flex-col md:col-span-2">
@@ -134,62 +89,10 @@ export function WelcomeScreen({
           </CardHeader>
 
           <CardContent className="flex-1">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              onChange={(event) => {
-                void handleFiles(event.target.files);
-                event.target.value = "";
-              }}
+            <SpreadsheetDropzone
+              helperText="Setelah file dibaca, hasil perhitungan dan peringkat langsung ditampilkan."
+              onImported={(parsed) => onDatasetReady(parsed, "results")}
             />
-
-            <div
-              role="button"
-              tabIndex={0}
-              aria-label="Unggah file spreadsheet Excel atau CSV"
-              onClick={() => fileInputRef.current?.click()}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  fileInputRef.current?.click();
-                }
-              }}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setIsDragging(true);
-              }}
-              onDragEnter={(event) => {
-                event.preventDefault();
-                setIsDragging(true);
-              }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={(event) => {
-                event.preventDefault();
-                setIsDragging(false);
-                void handleFiles(event.dataTransfer.files);
-              }}
-              className={`flex h-full min-h-40 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors ${
-                isDragging
-                  ? "border-primary bg-primary/5"
-                  : "border-border bg-muted/20 hover:border-primary/50 hover:bg-muted/40"
-              }`}
-            >
-              <Upload
-                className="size-6 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <p className="text-sm font-medium text-foreground">
-                {isImporting
-                  ? "Memproses file spreadsheet..."
-                  : "Seret & lepas file Excel/CSV ke sini, atau klik untuk memilih"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Setelah file dibaca, hasil perhitungan dan peringkat langsung
-                ditampilkan.
-              </p>
-            </div>
           </CardContent>
         </Card>
 

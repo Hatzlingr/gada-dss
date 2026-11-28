@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { type ReactElement, useState, useSyncExternalStore } from "react";
 import {
   BarChart3,
   CheckCircle2,
@@ -20,6 +20,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { summarizeConsistency } from "@/components/gada/gada-ui";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -72,27 +73,91 @@ const chartSkeleton = (
 
 export function ResultsView({ result }: ResultsViewProps) {
   const isClient = useIsClient();
+  const sortedWeights = [...result.criteriaWeights].sort(
+    (a, b) => b.normalizedWeight - a.normalizedWeight || a.rank - b.rank
+  );
+  const topTenRankings = result.rankings.slice(0, TOP_ALTERNATIVES_LIMIT);
 
   return (
     <div className="space-y-6">
-      <SummaryStrip result={result} />
-      <ResultsChartsSection
-        rankings={result.rankings}
-        criteriaWeights={result.criteriaWeights}
-        isClient={isClient}
-      />
+      <SummaryStrip result={result} topCriterion={sortedWeights[0]} />
+
+      <section
+        aria-label="Visualisasi Skor dan Bobot GADA"
+        className="grid grid-cols-1 gap-6 lg:grid-cols-2"
+      >
+        <HorizontalBarChartCard
+          title={`Top ${topTenRankings.length} Alternatif Terbaik`}
+          description="Perbandingan Skor Relatif Akhir (R̂ⱼ) hasil agregasi geometrik GADA"
+          badgeLabel="Skor R̂ⱼ"
+          icon={<BarChart3 className="size-4 text-primary" aria-hidden="true" />}
+          data={topTenRankings}
+          getBarValue={(item) => item.relativeScore}
+          getCategoryLabel={(item) => item.name}
+          yAxisWidth={145}
+          isClient={isClient}
+          getItemKey={(item) => item.alternativeId}
+          getBarFill={(item) =>
+            item.rank <= TOP_HIGHLIGHT_COUNT ? "var(--chart-2)" : "var(--chart-1)"
+          }
+          xTickFormatter={(val) => val.toFixed(3)}
+          yTickFormatter={(val) => truncateLabel(val, 20)}
+          tooltipContent={<TopAlternativeTooltip />}
+          legends={[
+            { colorClass: "bg-(--chart-2)", label: "Top 3" },
+            { colorClass: "bg-(--chart-1)", label: "Peringkat lainnya" },
+          ]}
+        />
+
+        <HorizontalBarChartCard
+          title="Bobot Konsensus Kriteria Aktif (Wₖ)"
+          description="Prioritas kriteria terurut menurun dalam persentase (%) dan bobot ternormalisasi"
+          badgeLabel="Total 100.00%"
+          icon={
+            <SlidersHorizontal
+              className="size-4 text-primary"
+              aria-hidden="true"
+            />
+          }
+          data={sortedWeights}
+          getBarValue={(item) => item.percentage}
+          getCategoryLabel={(item) => item.name}
+          yAxisWidth={150}
+          isClient={isClient}
+          getItemKey={(item) => item.criterionId}
+          getBarFill={(item) =>
+            item.type === "cost" ? "var(--chart-4)" : "var(--chart-2)"
+          }
+          xTickFormatter={(val) => `${val.toFixed(1)}%`}
+          yTickFormatter={(val) => truncateLabel(val, 21)}
+          tooltipContent={<CriterionWeightTooltip />}
+          legends={[
+            {
+              colorClass: "bg-(--chart-2)",
+              label: "Benefit (Lebih besar lebih baik)",
+            },
+            {
+              colorClass: "bg-(--chart-4)",
+              label: "Cost (Lebih kecil lebih baik)",
+            },
+          ]}
+        />
+      </section>
+
       <RankingTableSection rankings={result.rankings} />
     </div>
   );
 }
 
-function SummaryStrip({ result }: { result: GadaOutput }) {
+function SummaryStrip({
+  result,
+  topCriterion,
+}: {
+  result: GadaOutput;
+  topCriterion: CriterionWeightResult | undefined;
+}) {
   const topAlternative = result.rankings[0];
-  const sortedWeights = [...result.criteriaWeights].sort(
-    (a, b) => b.normalizedWeight - a.normalizedWeight || a.rank - b.rank
-  );
-  const topCriterion = sortedWeights[0];
-  const consistencySummary = summarizeConsistency(result.respondentConsistency);
+  const consistency = summarizeConsistency(result.respondentConsistency);
 
   return (
     <section
@@ -113,7 +178,8 @@ function SummaryStrip({ result }: { result: GadaOutput }) {
         </CardHeader>
         <CardContent className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
           <span className="truncate">
-            {topAlternative?.address || `${result.rankings.length} alternatif dievaluasi`}
+            {topAlternative?.address ||
+              `${result.rankings.length} alternatif dievaluasi`}
           </span>
           {topAlternative ? (
             <span className="font-mono text-sm font-semibold text-foreground tabular-nums">
@@ -159,23 +225,23 @@ function SummaryStrip({ result }: { result: GadaOutput }) {
             <Users className="size-4 text-chart-2" aria-hidden="true" />
           </div>
           <CardTitle className="font-mono text-xl font-bold tabular-nums">
-            {consistencySummary
-              ? `√ᾱ = ${formatWeight(consistencySummary.avgSqrtAlpha)}`
+            {consistency
+              ? `√ᾱ = ${formatWeight(consistency.avgSqrtAlpha)}`
               : "—"}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>
-            {consistencySummary
-              ? `${consistencySummary.total} responden`
+            {consistency
+              ? `${consistency.total} responden`
               : "Tidak ada data responden"}
           </span>
-          {consistencySummary ? (
+          {consistency ? (
             <span className="font-mono tabular-nums">
-              {consistencySummary.highCount} tinggi •{" "}
-              {consistencySummary.moderateCount} moderat
-              {consistencySummary.lowCount > 0
-                ? ` • ${consistencySummary.lowCount} rendah`
+              {consistency.highCount} tinggi • {consistency.moderateCount}{" "}
+              moderat
+              {consistency.lowWarningCount > 0
+                ? ` • ${consistency.lowWarningCount} rendah`
                 : ""}
             </span>
           ) : null}
@@ -185,56 +251,54 @@ function SummaryStrip({ result }: { result: GadaOutput }) {
   );
 }
 
-function ResultsChartsSection({
-  rankings,
-  criteriaWeights,
-  isClient,
-}: {
-  rankings: readonly AlternativeRankingResult[];
-  criteriaWeights: readonly CriterionWeightResult[];
+interface HorizontalBarChartCardProps<T extends object> {
+  title: string;
+  description: string;
+  badgeLabel: string;
+  icon: ReactElement;
+  data: T[];
+  getBarValue: (item: T) => number;
+  getCategoryLabel: (item: T) => string;
+  yAxisWidth: number;
   isClient: boolean;
-}) {
-  const topTenChartData = rankings.slice(0, TOP_ALTERNATIVES_LIMIT);
-  const sortedWeightsChartData = [...criteriaWeights].sort(
-    (a, b) => b.normalizedWeight - a.normalizedWeight || a.rank - b.rank
-  );
-
-  return (
-    <section
-      aria-label="Visualisasi Skor dan Bobot GADA"
-      className="grid grid-cols-1 gap-6 lg:grid-cols-2"
-    >
-      <TopAlternativesChartCard data={topTenChartData} isClient={isClient} />
-      <CriteriaWeightsChartCard
-        data={sortedWeightsChartData}
-        isClient={isClient}
-      />
-    </section>
-  );
+  getItemKey: (item: T) => string;
+  getBarFill: (item: T) => string;
+  xTickFormatter: (value: number) => string;
+  yTickFormatter: (value: string) => string;
+  tooltipContent: ReactElement;
+  legends: ReadonlyArray<{ colorClass: string; label: string }>;
 }
 
-function TopAlternativesChartCard({
+function HorizontalBarChartCard<T extends object>({
+  title,
+  description,
+  badgeLabel,
+  icon,
   data,
+  getBarValue,
+  getCategoryLabel,
+  yAxisWidth,
   isClient,
-}: {
-  data: AlternativeRankingResult[];
-  isClient: boolean;
-}) {
+  getItemKey,
+  getBarFill,
+  xTickFormatter,
+  yTickFormatter,
+  tooltipContent,
+  legends,
+}: HorizontalBarChartCardProps<T>) {
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-2">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
-              <BarChart3 className="size-4 text-primary" aria-hidden="true" />
-              Top {data.length} Alternatif Terbaik
+              {icon}
+              {title}
             </CardTitle>
-            <CardDescription>
-              Perbandingan Skor Relatif Akhir (R̂ⱼ) hasil agregasi geometrik GADA
-            </CardDescription>
+            <CardDescription>{description}</CardDescription>
           </div>
           <Badge variant="outline" className="text-xs">
-            Skor R̂ⱼ
+            {badgeLabel}
           </Badge>
         </div>
       </CardHeader>
@@ -250,37 +314,30 @@ function TopAlternativesChartCard({
                 />
                 <XAxis
                   type="number"
-                  tickFormatter={(val: number) => val.toFixed(3)}
+                  tickFormatter={xTickFormatter}
                   tick={{ fontSize: 11 }}
                   className="fill-muted-foreground"
                 />
                 <YAxis
                   type="category"
-                  dataKey="name"
-                  width={145}
-                  tickFormatter={(val: string) => truncateLabel(val, 20)}
+                  dataKey={getCategoryLabel}
+                  width={yAxisWidth}
+                  tickFormatter={yTickFormatter}
                   tick={{ fontSize: 11 }}
                   className="fill-foreground"
                 />
                 <Tooltip
                   cursor={{ fill: "var(--muted)", opacity: 0.45 }}
-                  content={<TopAlternativeTooltip />}
+                  content={tooltipContent}
                 />
                 <Bar
-                  dataKey="relativeScore"
+                  dataKey={getBarValue}
                   radius={[0, 6, 6, 0]}
                   maxBarSize={24}
                   isAnimationActive={false}
                 >
                   {data.map((entry) => (
-                    <Cell
-                      key={entry.alternativeId}
-                      fill={
-                        entry.rank <= TOP_HIGHLIGHT_COUNT
-                          ? "var(--chart-2)"
-                          : "var(--chart-1)"
-                      }
-                    />
+                    <Cell key={getItemKey(entry)} fill={getBarFill(entry)} />
                   ))}
                 </Bar>
               </BarChart>
@@ -290,124 +347,15 @@ function TopAlternativesChartCard({
           chartSkeleton
         )}
         <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-          <ChartLegendItem colorClass="bg-(--chart-2)" label="Top 3" />
-          <ChartLegendItem
-            colorClass="bg-(--chart-1)"
-            label="Peringkat lainnya"
-          />
+          {legends.map((item) => (
+            <span key={item.label} className="flex items-center gap-1.5">
+              <span className={`size-2.5 rounded-sm ${item.colorClass}`} />
+              {item.label}
+            </span>
+          ))}
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function CriteriaWeightsChartCard({
-  data,
-  isClient,
-}: {
-  data: CriterionWeightResult[];
-  isClient: boolean;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <SlidersHorizontal
-                className="size-4 text-primary"
-                aria-hidden="true"
-              />
-              Bobot Konsensus Kriteria Aktif (Wₖ)
-            </CardTitle>
-            <CardDescription>
-              Prioritas kriteria terurut menurun dalam persentase (%) dan bobot
-              ternormalisasi
-            </CardDescription>
-          </div>
-          <Badge variant="outline" className="text-xs">
-            Total 100.00%
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {isClient ? (
-          <div className="h-[340px] w-full min-w-0">
-            <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-              <BarChart data={data} layout="vertical" margin={CHART_MARGIN}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  horizontal={false}
-                  className="stroke-border"
-                />
-                <XAxis
-                  type="number"
-                  tickFormatter={(val: number) => `${val.toFixed(1)}%`}
-                  tick={{ fontSize: 11 }}
-                  className="fill-muted-foreground"
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={150}
-                  tickFormatter={(val: string) => truncateLabel(val, 21)}
-                  tick={{ fontSize: 11 }}
-                  className="fill-foreground"
-                />
-                <Tooltip
-                  cursor={{ fill: "var(--muted)", opacity: 0.45 }}
-                  content={<CriterionWeightTooltip />}
-                />
-                <Bar
-                  dataKey="percentage"
-                  radius={[0, 6, 6, 0]}
-                  maxBarSize={24}
-                  isAnimationActive={false}
-                >
-                  {data.map((entry) => (
-                    <Cell
-                      key={entry.criterionId}
-                      fill={
-                        entry.type === "cost"
-                          ? "var(--chart-4)"
-                          : "var(--chart-2)"
-                      }
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          chartSkeleton
-        )}
-        <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-          <ChartLegendItem
-            colorClass="bg-(--chart-2)"
-            label="Benefit (Lebih besar lebih baik)"
-          />
-          <ChartLegendItem
-            colorClass="bg-(--chart-4)"
-            label="Cost (Lebih kecil lebih baik)"
-          />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ChartLegendItem({
-  colorClass,
-  label,
-}: {
-  colorClass: string;
-  label: string;
-}) {
-  return (
-    <span className="flex items-center gap-1.5">
-      <span className={`size-2.5 rounded-sm ${colorClass}`} />
-      {label}
-    </span>
   );
 }
 
@@ -461,9 +409,7 @@ function RankingTableSection({
               <TableHead className="w-24">Peringkat</TableHead>
               <TableHead>Nama Alternatif</TableHead>
               <TableHead className="text-right">Indeks GADA (r̂ⱼ)</TableHead>
-              <TableHead className="text-right">
-                Skor Relatif (R̂ⱼ)
-              </TableHead>
+              <TableHead className="text-right">Skor Relatif (R̂ⱼ)</TableHead>
               <TableHead className="text-right">Persentase</TableHead>
             </TableRow>
           </TableHeader>
@@ -482,9 +428,7 @@ function RankingTableSection({
                 <TableRow
                   key={row.alternativeId}
                   className={
-                    row.rank <= TOP_HIGHLIGHT_COUNT
-                      ? "bg-muted/30"
-                      : undefined
+                    row.rank <= TOP_HIGHLIGHT_COUNT ? "bg-muted/30" : undefined
                   }
                 >
                   <TableCell>
@@ -597,39 +541,6 @@ function CriterionWeightTooltip({
       </div>
     </div>
   );
-}
-
-function summarizeConsistency(
-  consistency: GadaOutput["respondentConsistency"]
-) {
-  const total = consistency.length;
-  if (total === 0) {
-    return null;
-  }
-
-  let highCount = 0;
-  let moderateCount = 0;
-  let lowCount = 0;
-  let sqrtAlphaSum = 0;
-
-  for (const item of consistency) {
-    sqrtAlphaSum += item.sqrtAlpha;
-    if (item.status === "high") {
-      highCount += 1;
-    } else if (item.status === "moderate") {
-      moderateCount += 1;
-    } else {
-      lowCount += 1;
-    }
-  }
-
-  return {
-    total,
-    highCount,
-    moderateCount,
-    lowCount,
-    avgSqrtAlpha: sqrtAlphaSum / total,
-  };
 }
 
 function filterRankings(

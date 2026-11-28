@@ -219,12 +219,10 @@ interface PreprocessedAlternatives {
   cleanedMatrix: number[][];
 }
 
-function preprocessAlternatives(
-  criteria: CriterionConfig[],
-  alternatives: AlternativeItem[],
-  alternativeValues: Record<string, Record<string, RawCellValue>>,
-  options: GadaOptions
-): PreprocessedAlternatives {
+function partitionCandidateCriteria(criteria: CriterionConfig[]): {
+  candidateCriteria: CriterionConfig[];
+  excludedCriteria: ExcludedCriterion[];
+} {
   const excludedCriteria: ExcludedCriterion[] = [];
   const candidateCriteria: CriterionConfig[] = [];
 
@@ -242,6 +240,91 @@ function preprocessAlternatives(
     }
   }
 
+  return { candidateCriteria, excludedCriteria };
+}
+
+function cleanCriterionColumn(
+  criterion: CriterionConfig,
+  alternatives: AlternativeItem[],
+  alternativeValues: Record<string, Record<string, RawCellValue>>,
+  options: GadaOptions
+): { cleanedColumn: number[]; columnImputations: ImputationLog[] } {
+  const parsedColumn: Array<{ raw: RawCellValue; value: number | null }> = [];
+  const validValues: number[] = [];
+
+  for (const alternative of alternatives) {
+    const raw = alternativeValues[alternative.id]?.[criterion.id];
+    let parsed: number | null;
+    try {
+      parsed = parseRawCell(raw, options);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Failed to parse value for alternative "${alternative.name}" on criterion "${criterion.name}" (${criterion.code}): ${message}`
+      );
+    }
+
+    if (parsed !== null) {
+      assertStrictlyPositiveCell(parsed, alternative.name, criterion);
+      validValues.push(parsed);
+    }
+    parsedColumn.push({ raw, value: parsed });
+  }
+
+  const hasMissing = parsedColumn.some((entry) => entry.value === null);
+  const imputedFillValue = hasMissing
+    ? resolveImputedValue(criterion, validValues)
+    : 0;
+
+  const cleanedColumn: number[] = [];
+  const columnImputations: ImputationLog[] = [];
+
+  for (let rowIdx = 0; rowIdx < alternatives.length; rowIdx++) {
+    const alternative = alternatives[rowIdx];
+    const cell = parsedColumn[rowIdx];
+    if (!alternative || !cell) {
+      continue;
+    }
+
+    if (cell.value === null) {
+      assertStrictlyPositiveCell(imputedFillValue, alternative.name, criterion);
+      cleanedColumn.push(imputedFillValue);
+      columnImputations.push({
+        alternativeId: alternative.id,
+        alternativeName: alternative.name,
+        criterionId: criterion.id,
+        criterionCode: criterion.code,
+        criterionName: criterion.name,
+        rawValue: cell.raw,
+        imputedValue: imputedFillValue,
+        strategy: criterion.missingStrategy,
+      });
+    } else {
+      cleanedColumn.push(cell.value);
+    }
+  }
+
+  return { cleanedColumn, columnImputations };
+}
+
+function transposeColumnsToMatrix(
+  columns: number[][],
+  rowCount: number
+): number[][] {
+  return Array.from({ length: rowCount }, (_, rowIdx) =>
+    columns.map((column) => column[rowIdx] ?? 0)
+  );
+}
+
+function preprocessAlternatives(
+  criteria: CriterionConfig[],
+  alternatives: AlternativeItem[],
+  alternativeValues: Record<string, Record<string, RawCellValue>>,
+  options: GadaOptions
+): PreprocessedAlternatives {
+  const { candidateCriteria, excludedCriteria } =
+    partitionCandidateCriteria(criteria);
+
   if (candidateCriteria.length < MIN_ACTIVE_CRITERIA) {
     throw new Error(
       `At least ${MIN_ACTIVE_CRITERIA} active criteria are required, found ${candidateCriteria.length}.`
@@ -253,58 +336,13 @@ function preprocessAlternatives(
   const activeCriteria: CriterionConfig[] = [];
 
   for (const criterion of candidateCriteria) {
-    const parsedColumn: Array<{ raw: RawCellValue; value: number | null }> = [];
-    const validValues: number[] = [];
-
-    for (const alternative of alternatives) {
-      const raw = alternativeValues[alternative.id]?.[criterion.id];
-      let parsed: number | null;
-      try {
-        parsed = parseRawCell(raw, options);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        throw new Error(
-          `Failed to parse value for alternative "${alternative.name}" on criterion "${criterion.name}" (${criterion.code}): ${message}`
-        );
-      }
-
-      if (parsed !== null) {
-        assertStrictlyPositiveCell(parsed, alternative.name, criterion);
-        validValues.push(parsed);
-      }
-      parsedColumn.push({ raw, value: parsed });
-    }
-
-    const hasMissing = parsedColumn.some((entry) => entry.value === null);
-    const imputedFillValue = hasMissing
-      ? resolveImputedValue(criterion, validValues)
-      : 0;
-
-    const cleanedColumn: number[] = [];
-    for (let rowIdx = 0; rowIdx < alternatives.length; rowIdx++) {
-      const alternative = alternatives[rowIdx];
-      const cell = parsedColumn[rowIdx];
-      if (!alternative || !cell) {
-        continue;
-      }
-
-      if (cell.value === null) {
-        assertStrictlyPositiveCell(imputedFillValue, alternative.name, criterion);
-        cleanedColumn.push(imputedFillValue);
-        imputationLogs.push({
-          alternativeId: alternative.id,
-          alternativeName: alternative.name,
-          criterionId: criterion.id,
-          criterionCode: criterion.code,
-          criterionName: criterion.name,
-          rawValue: cell.raw,
-          imputedValue: imputedFillValue,
-          strategy: criterion.missingStrategy,
-        });
-      } else {
-        cleanedColumn.push(cell.value);
-      }
-    }
+    const { cleanedColumn, columnImputations } = cleanCriterionColumn(
+      criterion,
+      alternatives,
+      alternativeValues,
+      options
+    );
+    imputationLogs.push(...columnImputations);
 
     if (options.autoDropZeroVariance && isZeroVarianceColumn(cleanedColumn)) {
       const constantVal = cleanedColumn[0] ?? 0;
@@ -328,15 +366,14 @@ function preprocessAlternatives(
     );
   }
 
-  const cleanedMatrix: number[][] = alternatives.map((_, altIndex) =>
-    columnsByCriterion.map((column) => column[altIndex] ?? 0)
-  );
-
   return {
     activeCriteria,
     excludedCriteria,
     imputationLogs,
-    cleanedMatrix,
+    cleanedMatrix: transposeColumnsToMatrix(
+      columnsByCriterion,
+      alternatives.length
+    ),
   };
 }
 
@@ -466,9 +503,7 @@ function computeGroupCriterionWeights(
   respondentScores: Record<string, Record<string, number>>
 ): GroupWeightComputation {
   if (respondents.length < MIN_RESPONDENTS) {
-    throw new Error(
-      `At least ${MIN_RESPONDENTS} respondent is required when overrideWeights is not provided.`
-    );
+    throw new Error(`At least ${MIN_RESPONDENTS} respondent is required.`);
   }
 
   const betaMatrix = computeBetaMatrix(

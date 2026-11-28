@@ -5,27 +5,48 @@ import type {
   GadaInput,
   GadaOutput,
 } from "./types";
+import { downloadWorkbookFile } from "./workbook";
 
 export type MatrixCellValue = string | number;
 
-const XLSX_MIME_TYPE =
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const DEFAULT_EXPORT_BASENAME = "gada-analysis-report";
 
 type SheetCell = string | number | boolean | null;
 
-function sanitizeCellForMarkdown(value: MatrixCellValue): string {
-  return String(value)
-    .replaceAll("\r\n", " ")
-    .replaceAll("\n", " ")
-    .replaceAll("|", "\\|");
+function sanitizeCell(value: MatrixCellValue, format: "markdown" | "tsv"): string {
+  const normalized = String(value).replaceAll("\r\n", " ").replaceAll("\n", " ");
+  return format === "markdown"
+    ? normalized.replaceAll("|", "\\|")
+    : normalized.replaceAll("\t", " ");
 }
 
-function sanitizeCellForTSV(value: MatrixCellValue): string {
-  return String(value)
-    .replaceAll("\r\n", " ")
-    .replaceAll("\n", " ")
-    .replaceAll("\t", " ");
+function formatMatrixTable(
+  headers: readonly string[],
+  rows: ReadonlyArray<ReadonlyArray<MatrixCellValue>>,
+  format: "markdown" | "tsv"
+): string {
+  if (headers.length === 0) {
+    return "";
+  }
+
+  const formatRow = (cells: readonly MatrixCellValue[]) => {
+    const sanitized = cells.map((cell) => sanitizeCell(cell, format));
+    return format === "markdown"
+      ? `| ${sanitized.join(" | ")} |`
+      : sanitized.join("\t");
+  };
+
+  const lines = [formatRow(headers)];
+  if (format === "markdown") {
+    lines.push(`| ${headers.map(() => "---").join(" | ")} |`);
+  }
+
+  for (const row of rows) {
+    const aligned = headers.map((_, colIdx) => row[colIdx] ?? "");
+    lines.push(formatRow(aligned));
+  }
+
+  return lines.join("\n");
 }
 
 /**
@@ -35,21 +56,7 @@ export function formatMatrixAsMarkdown(
   headers: readonly string[],
   rows: ReadonlyArray<ReadonlyArray<MatrixCellValue>>
 ): string {
-  if (headers.length === 0) {
-    return "";
-  }
-
-  const headerLine = `| ${headers.map(sanitizeCellForMarkdown).join(" | ")} |`;
-  const separatorLine = `| ${headers.map(() => "---").join(" | ")} |`;
-  const bodyLines = rows.map((row) => {
-    const cells = headers.map((_, colIdx) => {
-      const cell = row[colIdx];
-      return cell === undefined ? "" : sanitizeCellForMarkdown(cell);
-    });
-    return `| ${cells.join(" | ")} |`;
-  });
-
-  return [headerLine, separatorLine, ...bodyLines].join("\n");
+  return formatMatrixTable(headers, rows, "markdown");
 }
 
 /**
@@ -59,21 +66,7 @@ export function formatMatrixAsTSV(
   headers: readonly string[],
   rows: ReadonlyArray<ReadonlyArray<MatrixCellValue>>
 ): string {
-  if (headers.length === 0) {
-    return "";
-  }
-
-  const headerLine = headers.map(sanitizeCellForTSV).join("\t");
-  const bodyLines = rows.map((row) =>
-    headers
-      .map((_, colIdx) => {
-        const cell = row[colIdx];
-        return cell === undefined ? "" : sanitizeCellForTSV(cell);
-      })
-      .join("\t")
-  );
-
-  return [headerLine, ...bodyLines].join("\n");
+  return formatMatrixTable(headers, rows, "tsv");
 }
 
 function resolveExportFilename(input: GadaInput, filename?: string): string {
@@ -304,59 +297,67 @@ function buildAuditMatricesSheetRows(
   const alternativeLabels = input.alternatives.map((alt) => alt.name);
   const respondentLabels = input.respondents.map((resp) => resp.name);
 
-  appendMatrixSection(
-    rows,
-    "1. Cleaned Decision Matrix (A = [a_jk])",
-    "Alternative",
-    criterionHeaders,
-    alternativeLabels,
-    output.auditTrace.cleanedMatrix
-  );
+  const sections: Array<{
+    title: string;
+    rowHeaderLabel: string;
+    columnLabels: readonly string[];
+    rowLabels: readonly string[];
+    matrix: ReadonlyArray<ReadonlyArray<number>>;
+  }> = [
+    {
+      title: "1. Cleaned Decision Matrix (A = [a_jk])",
+      rowHeaderLabel: "Alternative",
+      columnLabels: criterionHeaders,
+      rowLabels: alternativeLabels,
+      matrix: output.auditTrace.cleanedMatrix,
+    },
+    {
+      title: "2. Reciprocated Operator Matrix (R = [r_jk])",
+      rowHeaderLabel: "Alternative",
+      columnLabels: criterionHeaders,
+      rowLabels: alternativeLabels,
+      matrix: output.auditTrace.reciprocatedMatrix,
+    },
+    {
+      title: "3. Preference Normalization Matrix (Beta = [beta_i(k)])",
+      rowHeaderLabel: "Respondent",
+      columnLabels: criterionHeaders,
+      rowLabels: respondentLabels,
+      matrix: output.auditTrace.betaMatrix,
+    },
+    {
+      title: "4. Zero-Starting Point Image Matrix (X0 = [x_i^0(k)])",
+      rowHeaderLabel: "Respondent",
+      columnLabels: criterionHeaders,
+      rowLabels: respondentLabels,
+      matrix: output.auditTrace.zeroPointMatrix,
+    },
+    {
+      title: "5. AGRPC Matrix (Epsilon = [epsilon_ij])",
+      rowHeaderLabel: "Respondent",
+      columnLabels: respondentLabels,
+      rowLabels: respondentLabels,
+      matrix: output.auditTrace.agrpcMatrix,
+    },
+    {
+      title: "6. Weighted Individual Preference Matrix (Theta = [theta_ik])",
+      rowHeaderLabel: "Respondent",
+      columnLabels: criterionHeaders,
+      rowLabels: respondentLabels,
+      matrix: output.auditTrace.thetaMatrix,
+    },
+  ];
 
-  appendMatrixSection(
-    rows,
-    "2. Reciprocated Operator Matrix (R = [r_jk])",
-    "Alternative",
-    criterionHeaders,
-    alternativeLabels,
-    output.auditTrace.reciprocatedMatrix
-  );
-
-  appendMatrixSection(
-    rows,
-    "3. Preference Normalization Matrix (Beta = [beta_i(k)])",
-    "Respondent",
-    criterionHeaders,
-    respondentLabels,
-    output.auditTrace.betaMatrix
-  );
-
-  appendMatrixSection(
-    rows,
-    "4. Zero-Starting Point Image Matrix (X0 = [x_i^0(k)])",
-    "Respondent",
-    criterionHeaders,
-    respondentLabels,
-    output.auditTrace.zeroPointMatrix
-  );
-
-  appendMatrixSection(
-    rows,
-    "5. AGRPC Matrix (Epsilon = [epsilon_ij])",
-    "Respondent",
-    respondentLabels,
-    respondentLabels,
-    output.auditTrace.agrpcMatrix
-  );
-
-  appendMatrixSection(
-    rows,
-    "6. Weighted Individual Preference Matrix (Theta = [theta_ik])",
-    "Respondent",
-    criterionHeaders,
-    respondentLabels,
-    output.auditTrace.thetaMatrix
-  );
+  for (const section of sections) {
+    appendMatrixSection(
+      rows,
+      section.title,
+      section.rowHeaderLabel,
+      section.columnLabels,
+      section.rowLabels,
+      section.matrix
+    );
+  }
 
   return rows;
 }
@@ -404,22 +405,5 @@ export function exportGadaOutputToExcel(
 ): void {
   const workbook = buildGadaReportWorkbook(input, output);
   const resolvedFilename = resolveExportFilename(input, filename);
-  const buffer = XLSX.write(workbook, {
-    bookType: "xlsx",
-    type: "array",
-  }) as ArrayBuffer;
-
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  const blob = new Blob([buffer], { type: XLSX_MIME_TYPE });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = resolvedFilename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
+  downloadWorkbookFile(workbook, resolvedFilename);
 }

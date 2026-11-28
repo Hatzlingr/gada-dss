@@ -15,6 +15,10 @@ import {
   Sigma,
   Users,
 } from "lucide-react";
+import {
+  type ConsistencySummary,
+  summarizeConsistency,
+} from "@/components/gada/gada-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,7 +57,6 @@ import type {
   GadaAuditTrace,
   GadaInput,
   GadaOutput,
-  RespondentConsistencyResult,
 } from "@/lib/gada/types";
 
 export interface AuditDiagnosticsViewProps {
@@ -89,6 +92,42 @@ const STATUS_FILTER_OPTIONS: ReadonlyArray<{
   { value: "moderate", label: "Moderat" },
   { value: "low_warning", label: "Peringatan Rendah" },
 ];
+
+const CONSISTENCY_BADGE_META: Record<
+  ConsistencyStatus,
+  { label: string; className: string }
+> = {
+  high: {
+    label: "Konsisten Tinggi",
+    className:
+      "border-emerald-200 bg-emerald-500/15 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-300",
+  },
+  moderate: {
+    label: "Moderat",
+    className:
+      "border-sky-200 bg-sky-500/15 text-sky-700 dark:border-sky-500/30 dark:text-sky-300",
+  },
+  low_warning: {
+    label: "Peringatan Rendah",
+    className:
+      "border-rose-200 bg-rose-500/15 text-rose-700 dark:border-rose-500/30 dark:text-rose-300",
+  },
+};
+
+const COPY_BUTTON_CONFIGS = [
+  {
+    format: "markdown" as const,
+    idleLabel: "Salin Markdown",
+    copiedLabel: "Tersalin (MD)",
+    Icon: Copy,
+  },
+  {
+    format: "tsv" as const,
+    idleLabel: "Salin TSV",
+    copiedLabel: "Tersalin (TSV)",
+    Icon: ClipboardList,
+  },
+] as const;
 
 const DEFAULT_MATRIX_TAB: MatrixTabConfig = {
   key: "cleanedMatrix",
@@ -180,83 +219,8 @@ function formatMatrixNumber(
   return value.toFixed(decimals);
 }
 
-function getConsistencyBadgeMeta(status: ConsistencyStatus): {
-  label: string;
-  className: string;
-} {
-  if (status === "high") {
-    return {
-      label: "Konsisten Tinggi",
-      className:
-        "border-emerald-200 bg-emerald-500/15 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-300",
-    };
-  }
-  if (status === "moderate") {
-    return {
-      label: "Moderat",
-      className:
-        "border-sky-200 bg-sky-500/15 text-sky-700 dark:border-sky-500/30 dark:text-sky-300",
-    };
-  }
-  return {
-    label: "Peringatan Rendah",
-    className:
-      "border-rose-200 bg-rose-500/15 text-rose-700 dark:border-rose-500/30 dark:text-rose-300",
-  };
-}
-
-interface ConsistencySummary {
-  total: number;
-  minItem: RespondentConsistencyResult;
-  maxItem: RespondentConsistencyResult;
-  avgSqrtAlpha: number;
-  highCount: number;
-  moderateCount: number;
-  lowWarningCount: number;
-}
-
-function computeConsistencySummary(
-  rows: readonly RespondentConsistencyResult[]
-): ConsistencySummary | null {
-  const first = rows[0];
-  if (!first) {
-    return null;
-  }
-
-  let minItem = first;
-  let maxItem = first;
-  let sqrtAlphaSum = 0;
-  let highCount = 0;
-  let moderateCount = 0;
-  let lowWarningCount = 0;
-
-  for (const item of rows) {
-    if (item.sqrtAlpha < minItem.sqrtAlpha) {
-      minItem = item;
-    }
-    if (item.sqrtAlpha > maxItem.sqrtAlpha) {
-      maxItem = item;
-    }
-    sqrtAlphaSum += item.sqrtAlpha;
-
-    if (item.status === "high") {
-      highCount += 1;
-    } else if (item.status === "moderate") {
-      moderateCount += 1;
-    } else {
-      lowWarningCount += 1;
-    }
-  }
-
-  return {
-    total: rows.length,
-    minItem,
-    maxItem,
-    avgSqrtAlpha: sqrtAlphaSum / rows.length,
-    highCount,
-    moderateCount,
-    lowWarningCount,
-  };
+function isStatusFilterValue(value: string | null): value is StatusFilterValue {
+  return STATUS_FILTER_OPTIONS.some((option) => option.value === value);
 }
 
 interface FormattedMatrixTableData {
@@ -292,12 +256,7 @@ function buildMatrixTableData(
   const headers = [config.rowHeader, ...colHeaders];
 
   if (rawMatrix.length === 0) {
-    return {
-      headers,
-      rows: [],
-      colCount: colHeaders.length,
-      rowCount: 0,
-    };
+    return { headers, rows: [], colCount: colHeaders.length, rowCount: 0 };
   }
 
   const rows: MatrixCellValue[][] = rawMatrix.map((rowValues, rowIdx) => {
@@ -324,125 +283,82 @@ function ConsistencyKpiStrip({
 }: {
   summary: ConsistencySummary | null;
 }) {
+  const kpiCards = [
+    {
+      label: "Minimum √αᵢ",
+      value: summary ? formatConsistencyMetric(summary.minItem.sqrtAlpha) : "—",
+      icon: <ArrowDownRight className="size-4 text-amber-500" aria-hidden="true" />,
+      footerLeft: summary ? summary.minItem.name : "Data responden tidak tersedia",
+      footerRight: summary
+        ? `α = ${formatConsistencyMetric(summary.minItem.alpha)}`
+        : null,
+    },
+    {
+      label: "Maksimum √αᵢ",
+      value: summary ? formatConsistencyMetric(summary.maxItem.sqrtAlpha) : "—",
+      icon: <ArrowUpRight className="size-4 text-emerald-500" aria-hidden="true" />,
+      footerLeft: summary ? summary.maxItem.name : "Data responden tidak tersedia",
+      footerRight: summary
+        ? `α = ${formatConsistencyMetric(summary.maxItem.alpha)}`
+        : null,
+    },
+    {
+      label: "Rata-rata √αᵢ Kelompok",
+      value: summary ? formatConsistencyMetric(summary.avgSqrtAlpha) : "—",
+      icon: <Users className="size-4 text-primary" aria-hidden="true" />,
+      footerLeft: summary ? `Total ${summary.total} responden` : "Tidak ada evaluasi AGRPC",
+      footerRight: summary
+        ? `${summary.highCount} tinggi • ${summary.moderateCount} moderat`
+        : null,
+    },
+    {
+      label: "Peringatan Konsistensi Rendah",
+      value: summary ? String(summary.lowWarningCount) : "—",
+      icon: (
+        <AlertTriangle
+          className={`size-4 ${
+            summary && summary.lowWarningCount > 0
+              ? "text-rose-500"
+              : "text-emerald-500"
+          }`}
+          aria-hidden="true"
+        />
+      ),
+      footerLeft: `Ambang batas: αᵢ < ${CONSISTENCY_THRESHOLDS.MODERATE_MIN_ALPHA.toFixed(2)}`,
+      footerRight: null,
+    },
+  ];
+
   return (
     <section
       aria-label="Ringkasan Konsistensi Responden"
       className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
     >
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between gap-2">
-            <CardDescription className="font-medium">
-              Minimum √αᵢ
-            </CardDescription>
-            <ArrowDownRight
-              className="size-4 text-amber-500"
-              aria-hidden="true"
-            />
-          </div>
-          <CardTitle className="font-mono text-2xl font-bold tabular-nums">
-            {summary ? formatConsistencyMetric(summary.minItem.sqrtAlpha) : "—"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="text-xs text-muted-foreground">
-          {summary ? (
+      {kpiCards.map((card) => (
+        <Card key={card.label}>
+          <CardHeader className="pb-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="truncate font-medium text-foreground">
-                {summary.minItem.name}
-              </span>
-              <span className="font-mono tabular-nums">
-                α = {formatConsistencyMetric(summary.minItem.alpha)}
-              </span>
+              <CardDescription className="font-medium">
+                {card.label}
+              </CardDescription>
+              {card.icon}
             </div>
-          ) : (
-            <span>Data responden tidak tersedia</span>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between gap-2">
-            <CardDescription className="font-medium">
-              Maksimum √αᵢ
-            </CardDescription>
-            <ArrowUpRight
-              className="size-4 text-emerald-500"
-              aria-hidden="true"
-            />
-          </div>
-          <CardTitle className="font-mono text-2xl font-bold tabular-nums">
-            {summary ? formatConsistencyMetric(summary.maxItem.sqrtAlpha) : "—"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="text-xs text-muted-foreground">
-          {summary ? (
-            <div className="flex items-center justify-between gap-2">
-              <span className="truncate font-medium text-foreground">
-                {summary.maxItem.name}
+            <CardTitle className="font-mono text-2xl font-bold tabular-nums">
+              {card.value}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span className="truncate font-medium text-foreground">
+              {card.footerLeft}
+            </span>
+            {card.footerRight ? (
+              <span className="shrink-0 font-mono tabular-nums">
+                {card.footerRight}
               </span>
-              <span className="font-mono tabular-nums">
-                α = {formatConsistencyMetric(summary.maxItem.alpha)}
-              </span>
-            </div>
-          ) : (
-            <span>Data responden tidak tersedia</span>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between gap-2">
-            <CardDescription className="font-medium">
-              Rata-rata √αᵢ Kelompok
-            </CardDescription>
-            <Users className="size-4 text-primary" aria-hidden="true" />
-          </div>
-          <CardTitle className="font-mono text-2xl font-bold tabular-nums">
-            {summary ? formatConsistencyMetric(summary.avgSqrtAlpha) : "—"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="text-xs text-muted-foreground">
-          {summary ? (
-            <div className="flex items-center justify-between gap-2">
-              <span>Total {summary.total} responden</span>
-              <span className="font-mono tabular-nums">
-                {summary.highCount} tinggi • {summary.moderateCount} moderat
-              </span>
-            </div>
-          ) : (
-            <span>Tidak ada evaluasi AGRPC</span>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between gap-2">
-            <CardDescription className="font-medium">
-              Peringatan Konsistensi Rendah
-            </CardDescription>
-            <AlertTriangle
-              className={
-                summary && summary.lowWarningCount > 0
-                  ? "size-4 text-rose-500"
-                  : "size-4 text-emerald-500"
-              }
-              aria-hidden="true"
-            />
-          </div>
-          <CardTitle className="font-mono text-2xl font-bold tabular-nums">
-            {summary ? summary.lowWarningCount : "—"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="text-xs text-muted-foreground">
-          <span>
-            Ambang batas peringatan: αᵢ &lt;{" "}
-            {CONSISTENCY_THRESHOLDS.MODERATE_MIN_ALPHA.toFixed(2)}
-          </span>
-        </CardContent>
-      </Card>
+            ) : null}
+          </CardContent>
+        </Card>
+      ))}
     </section>
   );
 }
@@ -472,35 +388,28 @@ export function AuditDiagnosticsView({
   }, []);
 
   const consistencySummary = useMemo(
-    () => computeConsistencySummary(result.respondentConsistency),
-    [result.respondentConsistency]
-  );
-
-  const indexedConsistency = useMemo(
-    () =>
-      result.respondentConsistency.map((item, idx) => ({
-        item,
-        respondentNumber: idx + 1,
-      })),
+    () => summarizeConsistency(result.respondentConsistency),
     [result.respondentConsistency]
   );
 
   const filteredConsistency = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    return indexedConsistency.filter(({ item }) => {
-      if (statusFilter !== "all" && item.status !== statusFilter) {
-        return false;
-      }
-      if (query.length === 0) {
-        return true;
-      }
-      return (
-        item.name.toLowerCase().includes(query) ||
-        item.respondentId.toLowerCase().includes(query)
-      );
-    });
-  }, [indexedConsistency, searchQuery, statusFilter]);
+    return result.respondentConsistency
+      .map((item, idx) => ({ item, respondentNumber: idx + 1 }))
+      .filter(({ item }) => {
+        if (statusFilter !== "all" && item.status !== statusFilter) {
+          return false;
+        }
+        if (query.length === 0) {
+          return true;
+        }
+        return (
+          item.name.toLowerCase().includes(query) ||
+          item.respondentId.toLowerCase().includes(query)
+        );
+      });
+  }, [result.respondentConsistency, searchQuery, statusFilter]);
 
   const selectedStatusLabel =
     STATUS_FILTER_OPTIONS.find((option) => option.value === statusFilter)
@@ -517,24 +426,6 @@ export function AuditDiagnosticsView({
     () => buildMatrixTableData(activeMatrixConfig, input, result),
     [activeMatrixConfig, input, result]
   );
-
-  const handleStatusFilterChange = (value: string | null) => {
-    if (
-      value === "all" ||
-      value === "high" ||
-      value === "moderate" ||
-      value === "low_warning"
-    ) {
-      setStatusFilter(value);
-    }
-  };
-
-  const handleMatrixTabChange = (value: string) => {
-    const matched = MATRIX_TABS.find((tab) => tab.key === value);
-    if (matched) {
-      setActiveMatrixKey(matched.key);
-    }
-  };
 
   const handleCopyMatrix = async (format: CopyFormat) => {
     if (activeMatrixData.rows.length === 0) {
@@ -568,12 +459,6 @@ export function AuditDiagnosticsView({
       );
     }
   };
-
-  const isMarkdownCopied =
-    copiedState?.key === activeMatrixConfig.key &&
-    copiedState.format === "markdown";
-  const isTsvCopied =
-    copiedState?.key === activeMatrixConfig.key && copiedState.format === "tsv";
 
   return (
     <div className="space-y-6">
@@ -654,7 +539,11 @@ export function AuditDiagnosticsView({
 
               <Select
                 value={statusFilter}
-                onValueChange={handleStatusFilterChange}
+                onValueChange={(val) => {
+                  if (isStatusFilterValue(val)) {
+                    setStatusFilter(val);
+                  }
+                }}
               >
                 <SelectTrigger
                   className="w-full sm:w-48"
@@ -707,7 +596,7 @@ export function AuditDiagnosticsView({
                   </TableRow>
                 ) : (
                   filteredConsistency.map(({ item, respondentNumber }) => {
-                    const badge = getConsistencyBadgeMeta(item.status);
+                    const badge = CONSISTENCY_BADGE_META[item.status];
                     return (
                       <TableRow key={item.respondentId}>
                         <TableCell className="font-mono text-xs text-muted-foreground tabular-nums">
@@ -770,43 +659,34 @@ export function AuditDiagnosticsView({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => handleCopyMatrix("markdown")}
-                disabled={activeMatrixData.rows.length === 0}
-                className="gap-1.5"
-              >
-                {isMarkdownCopied ? (
-                  <Check
-                    className="size-3.5 text-emerald-600"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <Copy className="size-3.5" aria-hidden="true" />
-                )}
-                {isMarkdownCopied ? "Tersalin (MD)" : "Salin Markdown"}
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => handleCopyMatrix("tsv")}
-                disabled={activeMatrixData.rows.length === 0}
-                className="gap-1.5"
-              >
-                {isTsvCopied ? (
-                  <Check
-                    className="size-3.5 text-emerald-600"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <ClipboardList className="size-3.5" aria-hidden="true" />
-                )}
-                {isTsvCopied ? "Tersalin (TSV)" : "Salin TSV"}
-              </Button>
+              {COPY_BUTTON_CONFIGS.map(
+                ({ format, idleLabel, copiedLabel, Icon }) => {
+                  const isCopied =
+                    copiedState?.key === activeMatrixConfig.key &&
+                    copiedState.format === format;
+                  return (
+                    <Button
+                      key={format}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleCopyMatrix(format)}
+                      disabled={activeMatrixData.rows.length === 0}
+                      className="gap-1.5"
+                    >
+                      {isCopied ? (
+                        <Check
+                          className="size-3.5 text-emerald-600"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <Icon className="size-3.5" aria-hidden="true" />
+                      )}
+                      {isCopied ? copiedLabel : idleLabel}
+                    </Button>
+                  );
+                }
+              )}
             </div>
           </div>
 
@@ -822,7 +702,12 @@ export function AuditDiagnosticsView({
         <CardContent className="pt-4">
           <Tabs
             value={activeMatrixKey}
-            onValueChange={handleMatrixTabChange}
+            onValueChange={(value) => {
+              const matched = MATRIX_TABS.find((tab) => tab.key === value);
+              if (matched) {
+                setActiveMatrixKey(matched.key);
+              }
+            }}
             className="space-y-4"
           >
             <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 p-1">
@@ -837,77 +722,61 @@ export function AuditDiagnosticsView({
               ))}
             </TabsList>
 
-            {MATRIX_TABS.map((tab) => {
-              const isSelected = tab.key === activeMatrixKey;
-              if (!isSelected) {
-                return <TabsContent key={tab.key} value={tab.key} />;
-              }
-
-              return (
-                <TabsContent
-                  key={tab.key}
-                  value={tab.key}
-                  className="space-y-4"
-                >
-                  <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="space-y-0.5">
-                      <div className="text-sm font-semibold text-foreground">
-                        {tab.title}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {tab.formulaDescription}
-                      </p>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className="w-fit shrink-0 font-mono"
-                    >
-                      Dimensi: {activeMatrixData.rowCount} ×{" "}
-                      {activeMatrixData.colCount}
-                    </Badge>
+            <TabsContent value={activeMatrixConfig.key} className="space-y-4">
+              <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-0.5">
+                  <div className="text-sm font-semibold text-foreground">
+                    {activeMatrixConfig.title}
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    {activeMatrixConfig.formulaDescription}
+                  </p>
+                </div>
+                <Badge variant="outline" className="w-fit shrink-0 font-mono">
+                  Dimensi: {activeMatrixData.rowCount} ×{" "}
+                  {activeMatrixData.colCount}
+                </Badge>
+              </div>
 
-                  <div className="rounded-lg border border-border [&_[data-slot=table-container]]:max-h-[480px] [&_[data-slot=table-container]]:overflow-auto">
-                    <Table>
-                      <TableHeader className="sticky top-0 z-20 bg-background">
-                        <TableRow>
-                          {activeMatrixData.headers.map((header, colIdx) => (
-                            <TableHead
-                              key={`${tab.key}-head-${colIdx}`}
-                              className={
-                                colIdx === 0
-                                  ? "sticky left-0 z-30 min-w-[180px] border-r border-border bg-background font-semibold"
-                                  : "text-right font-mono text-xs"
-                              }
-                            >
-                              {header}
-                            </TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {activeMatrixData.rows.map((rowCells, rowIdx) => (
-                          <TableRow key={`${tab.key}-row-${rowIdx}`}>
-                            {rowCells.map((cell, colIdx) => (
-                              <TableCell
-                                key={`${tab.key}-cell-${rowIdx}-${colIdx}`}
-                                className={
-                                  colIdx === 0
-                                    ? "sticky left-0 z-10 border-r border-border bg-background font-medium text-foreground"
-                                    : "text-right font-mono text-xs tabular-nums"
-                                }
-                              >
-                                {cell}
-                              </TableCell>
-                            ))}
-                          </TableRow>
+              <div className="rounded-lg border border-border [&_[data-slot=table-container]]:max-h-[480px] [&_[data-slot=table-container]]:overflow-auto">
+                <Table>
+                  <TableHeader className="sticky top-0 z-20 bg-background">
+                    <TableRow>
+                      {activeMatrixData.headers.map((header, colIdx) => (
+                        <TableHead
+                          key={`${activeMatrixConfig.key}-head-${colIdx}`}
+                          className={
+                            colIdx === 0
+                              ? "sticky left-0 z-30 min-w-[180px] border-r border-border bg-background font-semibold"
+                              : "text-right font-mono text-xs"
+                          }
+                        >
+                          {header}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {activeMatrixData.rows.map((rowCells, rowIdx) => (
+                      <TableRow key={`${activeMatrixConfig.key}-row-${rowIdx}`}>
+                        {rowCells.map((cell, colIdx) => (
+                          <TableCell
+                            key={`${activeMatrixConfig.key}-cell-${rowIdx}-${colIdx}`}
+                            className={
+                              colIdx === 0
+                                ? "sticky left-0 z-10 border-r border-border bg-background font-medium text-foreground"
+                                : "text-right font-mono text-xs tabular-nums"
+                            }
+                          >
+                            {cell}
+                          </TableCell>
                         ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </TabsContent>
-              );
-            })}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
