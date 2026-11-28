@@ -9,7 +9,9 @@ import {
   RotateCcw,
   SlidersHorizontal,
 } from "lucide-react";
+import { DataEditor } from "@/components/gada/DataEditor";
 import { ResultsView } from "@/components/gada/ResultsView";
+import { SimulatorView } from "@/components/gada/SimulatorView";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,91 +26,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { laundrySeedInput } from "@/data/laundry-seed";
 import { runGadaAnalysis } from "@/lib/gada/engine";
 import type { GadaInput, GadaOutput } from "@/lib/gada/types";
-
-interface DataEditorPlaceholderProps {
-  input: GadaInput;
-  result: GadaOutput | null;
-  error: string | null;
-  onChange: (nextInput: GadaInput) => void;
-  onResetPreset: () => void;
-}
-
-function DataEditorPlaceholder({
-  input,
-  result,
-  error,
-  onChange,
-  onResetPreset,
-}: DataEditorPlaceholderProps) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Database className="size-4 text-primary" aria-hidden="true" />
-          Data &amp; Kriteria
-        </CardTitle>
-        <CardDescription>
-          Modul Editor Data &amp; Upload Excel — disiapkan untuk integrasi DataEditor
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4 text-sm text-muted-foreground">
-        <p>
-          Panel ini siap menerima komponen <code className="font-mono text-foreground">DataEditor</code> dengan 5 props:{" "}
-          <code className="font-mono text-foreground">input</code>,{" "}
-          <code className="font-mono text-foreground">result</code> ({result ? "tersedia" : "null"}),{" "}
-          <code className="font-mono text-foreground">error</code> ({error ? "aktif" : "null"}),{" "}
-          <code className="font-mono text-foreground">onChange</code> ({typeof onChange === "function" ? "terhubung" : "menunggu"}), dan{" "}
-          <code className="font-mono text-foreground">onResetPreset</code> ({typeof onResetPreset === "function" ? "terhubung" : "menunggu"}).
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline">{input.alternatives.length} Alternatif</Badge>
-          <Badge variant="outline">{input.criteria.length} Total Kriteria</Badge>
-          <Badge variant="outline">{input.respondents.length} Responden</Badge>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-interface SimulatorViewPlaceholderProps {
-  input: GadaInput;
-  baseResult: GadaOutput;
-}
-
-function SimulatorViewPlaceholder({
-  input,
-  baseResult,
-}: SimulatorViewPlaceholderProps) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <SlidersHorizontal className="size-4 text-primary" aria-hidden="true" />
-          Simulator &amp; Radar
-        </CardTitle>
-        <CardDescription>
-          Modul What-If Simulator &amp; Perbandingan Radar — disiapkan untuk integrasi SimulatorView
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4 text-sm text-muted-foreground">
-        <p>
-          Panel ini siap menerima komponen <code className="font-mono text-foreground">SimulatorView</code> dengan kontrak{" "}
-          <code className="font-mono text-foreground">input</code> dan{" "}
-          <code className="font-mono text-foreground">baseResult</code>.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">
-            {baseResult.activeCriteria.length} Kriteria Aktif
-          </Badge>
-          <Badge variant="outline">
-            {input.alternatives.length} Alternatif Siap Simulasi
-          </Badge>
-          <Badge variant="secondary">Menggunakan Konsensus Kelompok</Badge>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 interface AuditDiagnosticsPlaceholderProps {
   input: GadaInput;
@@ -268,7 +185,7 @@ export default function HomePage() {
           </TabsContent>
 
           <TabsContent value="data">
-            <DataEditorPlaceholder
+            <DataEditor
               input={gadaInput}
               result={analysis.result}
               error={analysis.error}
@@ -279,7 +196,7 @@ export default function HomePage() {
 
           <TabsContent value="simulator">
             {analysis.result ? (
-              <SimulatorViewPlaceholder
+              <SimulatorView
                 input={gadaInput}
                 baseResult={analysis.result}
               />
