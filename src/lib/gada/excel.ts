@@ -15,10 +15,9 @@ import type {
   RawCellValue,
   RespondentItem,
 } from "./types";
+import { downloadWorkbookFile } from "./workbook";
 
 const TEMPLATE_FILE_NAME = "Template_Dataset_GADA.xlsx";
-const XLSX_MIME_TYPE =
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 const CRITERION_TYPE_TAG_REGEX = /^(.*?)\s*\((cost|benefit)\)\s*$/i;
 
@@ -207,6 +206,51 @@ function parseCriterionHeader(rawHeader: string): {
   };
 }
 
+function collectNonEmptyRows(
+  grid: SheetGrid,
+  startRowIdx = 1
+): Array<{ sourceRowNum: number; row: RawCellValue[] }> {
+  const rows: Array<{ sourceRowNum: number; row: RawCellValue[] }> = [];
+  for (let rowIdx = startRowIdx; rowIdx < grid.length; rowIdx++) {
+    const row = grid[rowIdx];
+    if (!row || isRowEmpty(row)) {
+      continue;
+    }
+    rows.push({ sourceRowNum: rowIdx + 1, row });
+  }
+  return rows;
+}
+
+function buildGenericCriteria(
+  headers: readonly string[],
+  startCriterionCol: number,
+  rawRows: readonly (readonly RawCellValue[])[]
+): CriterionConfig[] {
+  const criteria: CriterionConfig[] = [];
+
+  for (let col = startCriterionCol; col < headers.length; col++) {
+    const rawHeader = headers[col];
+    if (rawHeader === undefined) {
+      continue;
+    }
+    const index = criteria.length + 1;
+    const isBinary = detectBinaryColumn(rawRows, col);
+    const { name, type, missingStrategy } = parseCriterionHeader(rawHeader);
+
+    criteria.push({
+      id: `c${index}`,
+      code: `C${index}`,
+      name,
+      type,
+      missingStrategy,
+      active: true,
+      ...(isBinary ? { isBinary: true } : {}),
+    });
+  }
+
+  return criteria;
+}
+
 function parseGenericAlternatives(
   sheet: XLSX.WorkSheet,
   sheetName: string
@@ -227,43 +271,18 @@ function parseGenericAlternatives(
     );
   }
 
-  const dataRows: Array<{ sourceRowNum: number; row: RawCellValue[] }> = [];
-  for (let rowIdx = 1; rowIdx < grid.length; rowIdx++) {
-    const row = grid[rowIdx];
-    if (!row || isRowEmpty(row)) {
-      continue;
-    }
-    dataRows.push({ sourceRowNum: rowIdx + 1, row });
-  }
-
+  const dataRows = collectNonEmptyRows(grid);
   if (dataRows.length === 0) {
     throw new Error(
       `Sheet "${sheetName}" contains headers but no alternative data rows.`
     );
   }
 
-  const rawRowsOnly = dataRows.map((entry) => entry.row);
-  const criteria: CriterionConfig[] = [];
-
-  for (let col = startCriterionCol; col < headers.length; col++) {
-    const rawHeader = headers[col];
-    if (rawHeader === undefined) {
-      continue;
-    }
-    const index = criteria.length + 1;
-    const isBinary = detectBinaryColumn(rawRowsOnly, col);
-    const { name, type, missingStrategy } = parseCriterionHeader(rawHeader);
-
-    criteria.push({
-      id: `c${index}`,
-      code: `C${index}`,
-      name,
-      type,
-      missingStrategy,
-      active: true,
-      ...(isBinary ? { isBinary: true } : {}),
-    });
-  }
+  const criteria = buildGenericCriteria(
+    headers,
+    startCriterionCol,
+    dataRows.map((entry) => entry.row)
+  );
 
   const alternatives: AlternativeItem[] = [];
   const alternativeValues: Record<string, Record<string, RawCellValue>> = {};
@@ -394,19 +413,21 @@ function parseGenericRespondents(
     sheetName
   );
 
+  const dataRows = collectNonEmptyRows(grid);
+  if (dataRows.length === 0) {
+    throw new Error(
+      `Sheet "${sheetName}" contains headers but no respondent rows.`
+    );
+  }
+
   const respondents: RespondentItem[] = [];
   const respondentScores: Record<string, Record<string, number>> = {};
 
-  for (let rowIdx = 1; rowIdx < grid.length; rowIdx++) {
-    const row = grid[rowIdx];
-    if (!row || isRowEmpty(row)) {
-      continue;
-    }
-
+  for (const { sourceRowNum, row } of dataRows) {
     const name = normalizeCellString(row[0]);
     if (name === "") {
       throw new Error(
-        `Row ${rowIdx + 1} in sheet "${sheetName}" is missing a respondent name in column 1.`
+        `Row ${sourceRowNum} in sheet "${sheetName}" is missing a respondent name in column 1.`
       );
     }
 
@@ -423,16 +444,10 @@ function parseGenericRespondents(
       }
       scores[criterion.id] = parsePositiveNumber(
         row[col],
-        `Respondent "${name}" on "${criterion.name}" (row ${rowIdx + 1})`
+        `Respondent "${name}" on "${criterion.name}" (row ${sourceRowNum})`
       );
     }
     respondentScores[respId] = scores;
-  }
-
-  if (respondents.length === 0) {
-    throw new Error(
-      `Sheet "${sheetName}" contains headers but no respondent rows.`
-    );
   }
 
   return { respondents, respondentScores };
@@ -647,20 +662,5 @@ export function downloadTemplateWorkbook(): void {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, alternativesSheet, "Alternatif");
   XLSX.utils.book_append_sheet(workbook, respondentsSheet, "Responden");
-
-  const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
-  const blob = new Blob([buffer], { type: XLSX_MIME_TYPE });
-
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = TEMPLATE_FILE_NAME;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
+  downloadWorkbookFile(workbook, TEMPLATE_FILE_NAME);
 }

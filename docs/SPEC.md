@@ -173,7 +173,7 @@ The root workspace (`src/app/page.tsx`) starts with `gadaInput = null` on a neut
 
 1. **Tab 1 — Data & Kriteria (`DataEditor.tsx`):**
    - Inputs: `input`, `result` (nullable), `onChange`.
-   - Features: Drag-and-drop `.xlsx`/`.xls`/`.csv` upload, `"Download Template"`, `"Dataset Baru (3×3)"`, dataset title input, and 3 CRUD sub-tabs (Kriteria, Alternatif $S \times M$, Responden $N \times M$).
+   - Features: Dataset title input, drag-and-drop `.xlsx`/`.xls`/`.csv` re-upload via shared `SpreadsheetDropzone`, and 3 CRUD sub-tabs (Kriteria, Alternatif $S \times M$, Responden $N \times M$).
 2. **Tab 2 — Hasil & Peringkat (`ResultsView.tsx`):**
    - Inputs: `result`.
    - Features: 3-card summary strip (Top #1 alternative, top criterion weight $W_k\%$, average group consistency $\sqrt{\bar{\alpha}}$), responsive Recharts horizontal bar charts for Top 10 alternatives ($\hat{R}_j$) and sorted criterion weights ($W_k\%$, color-coded `cost` vs `benefit`), and a searchable ranking leaderboard table showing 6-decimal $\hat{r}_j$, 6-decimal $\hat{R}_j$, and percentage score.

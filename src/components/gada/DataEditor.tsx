@@ -1,17 +1,15 @@
 "use client";
 
-import { useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import {
-  AlertCircle,
   CheckCircle2,
   Database,
-  Download,
-  FilePlus2,
   FileSpreadsheet,
   Plus,
   Trash2,
-  Upload,
 } from "lucide-react";
+import { getCriterionTypeBadgeClass } from "@/components/gada/gada-ui";
+import { SpreadsheetDropzone } from "@/components/gada/SpreadsheetDropzone";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,11 +40,6 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DEFAULT_LIKERT_SCORE } from "@/lib/gada/constants";
-import {
-  createBlankGadaInput,
-  downloadTemplateWorkbook,
-  parseSpreadsheetToGadaInput,
-} from "@/lib/gada/excel";
 import type {
   AlternativeItem,
   CriterionConfig,
@@ -88,23 +81,15 @@ const IMPUTATION_STRATEGIES: readonly ImputationStrategy[] = [
 
 const DEFAULT_CUSTOM_PENALTY = 1000;
 
-function generateUniqueId(
+function generateUniqueKey(
   prefix: string,
-  existingIds: ReadonlySet<string>
+  existing: ReadonlySet<string>
 ): string {
-  let index = existingIds.size + 1;
-  while (existingIds.has(`${prefix}${index}`)) {
+  let index = existing.size + 1;
+  while (existing.has(`${prefix}${index}`)) {
     index += 1;
   }
   return `${prefix}${index}`;
-}
-
-function generateUniqueCode(existingCodes: ReadonlySet<string>): string {
-  let index = existingCodes.size + 1;
-  while (existingCodes.has(`C${index}`)) {
-    index += 1;
-  }
-  return `C${index}`;
 }
 
 function isCriterionType(value: string | null): value is CriterionType {
@@ -114,12 +99,7 @@ function isCriterionType(value: string | null): value is CriterionType {
 function isImputationStrategy(
   value: string | null
 ): value is ImputationStrategy {
-  return (
-    value === "penalty_max" ||
-    value === "min_value" ||
-    value === "mean" ||
-    value === "custom_penalty"
-  );
+  return IMPUTATION_STRATEGIES.some((strategy) => strategy === value);
 }
 
 function formatRawDisplay(value: RawCellValue): string {
@@ -127,6 +107,19 @@ function formatRawDisplay(value: RawCellValue): string {
     return "";
   }
   return String(value);
+}
+
+function omitRecordKey<T>(
+  records: Record<string, Record<string, T>>,
+  keyToOmit: string
+): Record<string, Record<string, T>> {
+  const next: Record<string, Record<string, T>> = {};
+  for (const [rowId, row] of Object.entries(records)) {
+    const rest = { ...row };
+    delete rest[keyToOmit];
+    next[rowId] = rest;
+  }
+  return next;
 }
 
 interface NumberDraftInputProps {
@@ -173,9 +166,8 @@ function NumberDraftInput({
 }
 
 export function DataEditor({ input, result, onChange }: DataEditorProps) {
-  const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
+  const datasetInputId = useId();
 
   const excludedById = useMemo(() => {
     const map = new Map<string, ExcludedCriterion>();
@@ -199,53 +191,66 @@ export function DataEditor({ input, result, onChange }: DataEditorProps) {
     return keys;
   }, [result]);
 
-  const handleImportFile = async (file: File) => {
-    setIsImporting(true);
-    setImportError(null);
-    setImportSuccess(null);
-
-    try {
-      const parsed = await parseSpreadsheetToGadaInput(file);
-      onChange(parsed);
-      setImportSuccess(
-        `Berhasil mengimpor "${file.name}": ${parsed.alternatives.length} alternatif, ${parsed.criteria.length} kriteria, ${parsed.respondents.length} responden.`
-      );
-    } catch (err) {
-      setImportError(
-        err instanceof Error
-          ? err.message
-          : `Gagal membaca file "${file.name}".`
-      );
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
-  const handleCreateBlankDataset = () => {
-    setImportError(null);
-    setImportSuccess(
-      "Dataset starter baru (3 alternatif × 3 kriteria × 2 responden) telah dimuat."
-    );
-    onChange(createBlankGadaInput());
-  };
-
   return (
     <div className="space-y-6">
-      <SpreadsheetToolbarCard
-        datasetName={input.datasetName ?? ""}
-        isImporting={isImporting}
-        importError={importError}
-        importSuccess={importSuccess}
-        onDatasetNameChange={(nextName) =>
-          onChange({
-            ...input,
-            datasetName: nextName,
-          })
-        }
-        onFileSelected={handleImportFile}
-        onDownloadTemplate={downloadTemplateWorkbook}
-        onNewBlankDataset={handleCreateBlankDataset}
-      />
+      <Card>
+        <CardHeader className="border-b pb-4">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <FileSpreadsheet
+              className="size-4 text-primary"
+              aria-hidden="true"
+            />
+            Judul &amp; Ganti File Dataset
+          </CardTitle>
+          <CardDescription>
+            Ubah judul dataset atau unggah file .xlsx, .xls, maupun .csv baru
+            untuk mengganti matriks aktif.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-4 pt-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor={datasetInputId}>Judul Dataset</Label>
+              <Input
+                id={datasetInputId}
+                value={input.datasetName ?? ""}
+                onChange={(event) =>
+                  onChange({ ...input, datasetName: event.target.value })
+                }
+                placeholder="Contoh: Pemilihan Laptop Terbaik"
+              />
+              <p className="text-xs text-muted-foreground">
+                Ditampilkan pada header aplikasi dan nama file ekspor Excel.
+              </p>
+            </div>
+
+            <div className="lg:col-span-2">
+              <SpreadsheetDropzone
+                compact
+                helperText="Sheet 1: Alternatif & Kriteria. Sheet 2 opsional: Skor Responden (1–5)."
+                onImported={(parsed, fileName) => {
+                  onChange(parsed);
+                  setImportSuccess(
+                    `Berhasil mengimpor "${fileName}": ${parsed.alternatives.length} alternatif, ${parsed.criteria.length} kriteria, ${parsed.respondents.length} responden.`
+                  );
+                }}
+              />
+            </div>
+          </div>
+
+          {importSuccess !== null ? (
+            <Alert>
+              <CheckCircle2
+                className="size-4 text-emerald-600 dark:text-emerald-400"
+                aria-hidden="true"
+              />
+              <AlertTitle>Dataset Diperbarui</AlertTitle>
+              <AlertDescription>{importSuccess}</AlertDescription>
+            </Alert>
+          ) : null}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="border-b pb-4">
@@ -317,180 +322,6 @@ export function DataEditor({ input, result, onChange }: DataEditorProps) {
   );
 }
 
-function SpreadsheetToolbarCard({
-  datasetName,
-  isImporting,
-  importError,
-  importSuccess,
-  onDatasetNameChange,
-  onFileSelected,
-  onDownloadTemplate,
-  onNewBlankDataset,
-}: {
-  datasetName: string;
-  isImporting: boolean;
-  importError: string | null;
-  importSuccess: string | null;
-  onDatasetNameChange: (nextName: string) => void;
-  onFileSelected: (file: File) => void;
-  onDownloadTemplate: () => void;
-  onNewBlankDataset: () => void;
-}) {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const datasetInputId = useId();
-  const [isDragging, setIsDragging] = useState(false);
-
-  const handleFiles = (files: FileList | null) => {
-    const file = files?.[0];
-    if (!file) {
-      return;
-    }
-    onFileSelected(file);
-  };
-
-  return (
-    <Card>
-      <CardHeader className="border-b pb-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <FileSpreadsheet
-                className="size-4 text-primary"
-                aria-hidden="true"
-              />
-              Impor Excel / CSV &amp; Pengaturan Dataset
-            </CardTitle>
-            <CardDescription>
-              Unggah file .xlsx, .xls, atau .csv dari domain apa pun untuk
-              memperbarui matriks keputusan.
-            </CardDescription>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onDownloadTemplate}
-              className="gap-1.5"
-            >
-              <Download className="size-3.5" aria-hidden="true" />
-              Download Template
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onNewBlankDataset}
-              className="gap-1.5"
-            >
-              <FilePlus2 className="size-3.5" aria-hidden="true" />
-              Dataset Baru (3×3)
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-4 pt-4">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="space-y-2">
-            <Label htmlFor={datasetInputId}>Judul Dataset / Studi Kasus</Label>
-            <Input
-              id={datasetInputId}
-              value={datasetName}
-              onChange={(event) => onDatasetNameChange(event.target.value)}
-              placeholder="Contoh: Pemilihan Laptop Terbaik"
-            />
-            <p className="text-xs text-muted-foreground">
-              Ditampilkan pada header aplikasi dan nama file ekspor Excel.
-            </p>
-          </div>
-
-          <div className="lg:col-span-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              onChange={(event) => {
-                handleFiles(event.target.files);
-                event.target.value = "";
-              }}
-            />
-
-            <div
-              role="button"
-              tabIndex={0}
-              aria-label="Unggah file spreadsheet Excel atau CSV"
-              onClick={() => fileInputRef.current?.click()}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  fileInputRef.current?.click();
-                }
-              }}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setIsDragging(true);
-              }}
-              onDragEnter={(event) => {
-                event.preventDefault();
-                setIsDragging(true);
-              }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={(event) => {
-                event.preventDefault();
-                setIsDragging(false);
-                handleFiles(event.dataTransfer.files);
-              }}
-              className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-5 text-center transition-colors ${
-                isDragging
-                  ? "border-primary bg-primary/5"
-                  : "border-border bg-muted/20 hover:border-primary/50 hover:bg-muted/40"
-              }`}
-            >
-              <Upload
-                className="size-5 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <div className="space-y-0.5">
-                <p className="text-sm font-medium text-foreground">
-                  {isImporting
-                    ? "Memproses file spreadsheet..."
-                    : "Seret & lepas file .xlsx, .xls, atau .csv ke sini, atau klik untuk memilih"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Sheet 1: Alternatif &amp; Kriteria. Sheet 2 opsional: Skor
-                  Responden (1–5).
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {importError !== null ? (
-          <Alert variant="destructive">
-            <AlertCircle className="size-4" aria-hidden="true" />
-            <AlertTitle>Impor Spreadsheet Gagal</AlertTitle>
-            <AlertDescription>{importError}</AlertDescription>
-          </Alert>
-        ) : null}
-
-        {importSuccess !== null ? (
-          <Alert>
-            <CheckCircle2
-              className="size-4 text-emerald-600 dark:text-emerald-400"
-              aria-hidden="true"
-            />
-            <AlertTitle>Dataset Diperbarui</AlertTitle>
-            <AlertDescription>{importSuccess}</AlertDescription>
-          </Alert>
-        ) : null}
-      </CardContent>
-    </Card>
-  );
-}
-
 function CriteriaCrudTab({
   input,
   excludedById,
@@ -505,8 +336,8 @@ function CriteriaCrudTab({
     const existingCodes = new Set(
       input.criteria.map((c) => c.code.trim().toUpperCase())
     );
-    const id = generateUniqueId("c", existingIds);
-    const code = generateUniqueCode(existingCodes);
+    const id = generateUniqueKey("c", existingIds);
+    const code = generateUniqueKey("C", existingCodes);
 
     const newCriterion: CriterionConfig = {
       id,
@@ -553,58 +384,12 @@ function CriteriaCrudTab({
     });
   };
 
-  const handleTypeChange = (
-    criterion: CriterionConfig,
-    nextType: string | null
-  ) => {
-    if (!isCriterionType(nextType)) {
-      return;
-    }
-    const defaultStrategy: ImputationStrategy =
-      nextType === "cost" ? "penalty_max" : "min_value";
-
-    handleUpdateCriterion(criterion.id, {
-      type: nextType,
-      missingStrategy: defaultStrategy,
-    });
-  };
-
-  const handleStrategyChange = (
-    criterion: CriterionConfig,
-    nextStrategy: string | null
-  ) => {
-    if (!isImputationStrategy(nextStrategy)) {
-      return;
-    }
-    handleUpdateCriterion(criterion.id, {
-      missingStrategy: nextStrategy,
-      ...(nextStrategy === "custom_penalty" &&
-      criterion.customPenalty === undefined
-        ? { customPenalty: DEFAULT_CUSTOM_PENALTY }
-        : {}),
-    });
-  };
-
   const handleDeleteCriterion = (criterionId: string) => {
-    const nextAltValues: Record<string, Record<string, RawCellValue>> = {};
-    for (const [altId, row] of Object.entries(input.alternativeValues)) {
-      const rest = { ...row };
-      delete rest[criterionId];
-      nextAltValues[altId] = rest;
-    }
-
-    const nextRespScores: Record<string, Record<string, number>> = {};
-    for (const [respId, row] of Object.entries(input.respondentScores)) {
-      const rest = { ...row };
-      delete rest[criterionId];
-      nextRespScores[respId] = rest;
-    }
-
     onChange({
       ...input,
       criteria: input.criteria.filter((c) => c.id !== criterionId),
-      alternativeValues: nextAltValues,
-      respondentScores: nextRespScores,
+      alternativeValues: omitRecordKey(input.alternativeValues, criterionId),
+      respondentScores: omitRecordKey(input.respondentScores, criterionId),
     });
   };
 
@@ -612,8 +397,9 @@ function CriteriaCrudTab({
     <div className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-muted-foreground">
-          Kriteria bertipe <span className="font-medium text-foreground">Cost</span>{" "}
-          (lebih kecil lebih baik) otomatis mengatur strategi nilai kosong ke{" "}
+          Kriteria bertipe{" "}
+          <span className="font-medium text-foreground">Cost</span> (lebih kecil
+          lebih baik) otomatis mengatur strategi nilai kosong ke{" "}
           <code className="font-mono">penalty_max</code>;{" "}
           <span className="font-medium text-foreground">Benefit</span> ke{" "}
           <code className="font-mono">min_value</code>.
@@ -702,7 +488,16 @@ function CriteriaCrudTab({
                   <TableCell>
                     <Select
                       value={criterion.type}
-                      onValueChange={(val) => handleTypeChange(criterion, val)}
+                      onValueChange={(val) => {
+                        if (!isCriterionType(val)) {
+                          return;
+                        }
+                        handleUpdateCriterion(criterion.id, {
+                          type: val,
+                          missingStrategy:
+                            val === "cost" ? "penalty_max" : "min_value",
+                        });
+                      }}
                     >
                       <SelectTrigger
                         size="sm"
@@ -712,11 +507,9 @@ function CriteriaCrudTab({
                         <SelectValue>
                           <Badge
                             variant="outline"
-                            className={
-                              criterion.type === "cost"
-                                ? "border-rose-200 bg-rose-500/10 text-rose-700 dark:border-rose-500/30 dark:text-rose-300"
-                                : "border-emerald-200 bg-emerald-500/10 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-300"
-                            }
+                            className={getCriterionTypeBadgeClass(
+                              criterion.type
+                            )}
                           >
                             {CRITERION_TYPE_LABELS[criterion.type]}
                           </Badge>
@@ -749,9 +542,18 @@ function CriteriaCrudTab({
                   <TableCell>
                     <Select
                       value={criterion.missingStrategy}
-                      onValueChange={(val) =>
-                        handleStrategyChange(criterion, val)
-                      }
+                      onValueChange={(val) => {
+                        if (!isImputationStrategy(val)) {
+                          return;
+                        }
+                        handleUpdateCriterion(criterion.id, {
+                          missingStrategy: val,
+                          ...(val === "custom_penalty" &&
+                          criterion.customPenalty === undefined
+                            ? { customPenalty: DEFAULT_CUSTOM_PENALTY }
+                            : {}),
+                        });
+                      }}
                     >
                       <SelectTrigger
                         size="sm"
@@ -823,7 +625,7 @@ function AlternativesCrudTab({
 }) {
   const handleAddAlternative = () => {
     const existingIds = new Set(input.alternatives.map((a) => a.id));
-    const id = generateUniqueId("alt-", existingIds);
+    const id = generateUniqueKey("alt-", existingIds);
     const nextNumber = input.alternatives.length + 1;
 
     const newAlt: AlternativeItem = {
@@ -891,12 +693,14 @@ function AlternativesCrudTab({
     <div className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-muted-foreground">
-          Sel menerima angka positif, satuan (<code className="font-mono">800 m</code>,{" "}
+          Sel menerima angka positif, satuan (
+          <code className="font-mono">800 m</code>,{" "}
           <code className="font-mono">4.5 km</code>,{" "}
           <code className="font-mono">3 hari</code>), rentang jam (
           <code className="font-mono">08.00 - 18.00</code>), biner (
-          <code className="font-mono">Ya</code>/<code className="font-mono">Tidak</code>
-          ), atau <code className="font-mono">-</code> untuk imputasi otomatis.
+          <code className="font-mono">Ya</code>/
+          <code className="font-mono">Tidak</code>), atau{" "}
+          <code className="font-mono">-</code> untuk imputasi otomatis.
         </p>
         <Button
           type="button"
@@ -928,11 +732,7 @@ function AlternativesCrudTab({
                     <span className="font-mono text-xs">{criterion.code}</span>
                     <Badge
                       variant="outline"
-                      className={
-                        criterion.type === "cost"
-                          ? "border-rose-200 bg-rose-500/10 text-[10px] text-rose-700 dark:border-rose-500/30 dark:text-rose-300"
-                          : "border-emerald-200 bg-emerald-500/10 text-[10px] text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-300"
-                      }
+                      className={`text-[10px] ${getCriterionTypeBadgeClass(criterion.type)}`}
                     >
                       {criterion.type}
                     </Badge>
@@ -1012,9 +812,7 @@ function AlternativesCrudTab({
                         }
                         aria-label={`Nilai ${alternative.name} untuk ${criterion.name}`}
                         className={`min-w-28 font-mono text-xs ${
-                          isImputed
-                            ? "border-sky-400/70 bg-sky-500/5"
-                            : ""
+                          isImputed ? "border-sky-400/70 bg-sky-500/5" : ""
                         }`}
                       />
                     </TableCell>
@@ -1052,7 +850,7 @@ function RespondentsCrudTab({
 }) {
   const handleAddRespondent = () => {
     const existingIds = new Set(input.respondents.map((r) => r.id));
-    const id = generateUniqueId("resp-", existingIds);
+    const id = generateUniqueKey("resp-", existingIds);
     const nextNumber = input.respondents.length + 1;
 
     const newRespondent: RespondentItem = {
