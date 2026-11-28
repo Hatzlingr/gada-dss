@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { type ReactNode, useId, useMemo, useState } from "react";
 import {
   CheckCircle2,
   Database,
@@ -162,6 +162,74 @@ function NumberDraftInput({
       }}
       onBlur={() => setDraft(null)}
     />
+  );
+}
+
+function CrudSectionToolbar({
+  description,
+  addLabel,
+  onAdd,
+}: {
+  description: ReactNode;
+  addLabel: string;
+  onAdd: () => void;
+}) {
+  return (
+    <>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-muted-foreground">{description}</p>
+        <Button
+          type="button"
+          size="sm"
+          onClick={onAdd}
+          className="gap-1.5 self-start sm:self-auto"
+        >
+          <Plus className="size-3.5" aria-hidden="true" />
+          {addLabel}
+        </Button>
+      </div>
+      <Separator />
+    </>
+  );
+}
+
+function EmptyTableRow({
+  colSpan,
+  message,
+}: {
+  colSpan: number;
+  message: string;
+}) {
+  return (
+    <TableRow>
+      <TableCell
+        colSpan={colSpan}
+        className="py-8 text-center text-sm text-muted-foreground"
+      >
+        {message}
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function DeleteRowButton({
+  ariaLabel,
+  onClick,
+}: {
+  ariaLabel: string;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      aria-label={ariaLabel}
+      onClick={onClick}
+      className="text-muted-foreground hover:text-destructive"
+    >
+      <Trash2 className="size-4" aria-hidden="true" />
+    </Button>
   );
 }
 
@@ -395,27 +463,20 @@ function CriteriaCrudTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs text-muted-foreground">
-          Kriteria bertipe{" "}
-          <span className="font-medium text-foreground">Cost</span> (lebih kecil
-          lebih baik) otomatis mengatur strategi nilai kosong ke{" "}
-          <code className="font-mono">penalty_max</code>;{" "}
-          <span className="font-medium text-foreground">Benefit</span> ke{" "}
-          <code className="font-mono">min_value</code>.
-        </p>
-        <Button
-          type="button"
-          size="sm"
-          onClick={handleAddCriterion}
-          className="gap-1.5 self-start sm:self-auto"
-        >
-          <Plus className="size-3.5" aria-hidden="true" />
-          Tambah Kriteria
-        </Button>
-      </div>
-
-      <Separator />
+      <CrudSectionToolbar
+        description={
+          <>
+            Kriteria bertipe{" "}
+            <span className="font-medium text-foreground">Cost</span> (lebih
+            kecil lebih baik) otomatis mengatur strategi nilai kosong ke{" "}
+            <code className="font-mono">penalty_max</code>;{" "}
+            <span className="font-medium text-foreground">Benefit</span> ke{" "}
+            <code className="font-mono">min_value</code>.
+          </>
+        }
+        addLabel="Tambah Kriteria"
+        onAdd={handleAddCriterion}
+      />
 
       <Table>
         <TableHeader>
@@ -431,15 +492,10 @@ function CriteriaCrudTab({
         </TableHeader>
         <TableBody>
           {input.criteria.length === 0 ? (
-            <TableRow>
-              <TableCell
-                colSpan={7}
-                className="py-8 text-center text-sm text-muted-foreground"
-              >
-                Belum ada kriteria. Klik &ldquo;Tambah Kriteria&rdquo; untuk
-                memulai.
-              </TableCell>
-            </TableRow>
+            <EmptyTableRow
+              colSpan={7}
+              message="Belum ada kriteria. Klik &ldquo;Tambah Kriteria&rdquo; untuk memulai."
+            />
           ) : (
             input.criteria.map((criterion) => {
               const excluded = excludedById.get(criterion.id);
@@ -591,16 +647,10 @@ function CriteriaCrudTab({
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Hapus kriteria ${criterion.name}`}
+                    <DeleteRowButton
+                      ariaLabel={`Hapus kriteria ${criterion.name}`}
                       onClick={() => handleDeleteCriterion(criterion.id)}
-                      className="text-muted-foreground hover:text-destructive"
-                    >
-                      <Trash2 className="size-4" aria-hidden="true" />
-                    </Button>
+                    />
                   </TableCell>
                 </TableRow>
               );
@@ -691,29 +741,22 @@ function AlternativesCrudTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs text-muted-foreground">
-          Sel menerima angka positif, satuan (
-          <code className="font-mono">800 m</code>,{" "}
-          <code className="font-mono">4.5 km</code>,{" "}
-          <code className="font-mono">3 hari</code>), rentang jam (
-          <code className="font-mono">08.00 - 18.00</code>), biner (
-          <code className="font-mono">Ya</code>/
-          <code className="font-mono">Tidak</code>), atau{" "}
-          <code className="font-mono">-</code> untuk imputasi otomatis.
-        </p>
-        <Button
-          type="button"
-          size="sm"
-          onClick={handleAddAlternative}
-          className="gap-1.5 self-start sm:self-auto"
-        >
-          <Plus className="size-3.5" aria-hidden="true" />
-          Tambah Alternatif
-        </Button>
-      </div>
-
-      <Separator />
+      <CrudSectionToolbar
+        description={
+          <>
+            Sel menerima angka positif, satuan (
+            <code className="font-mono">800 m</code>,{" "}
+            <code className="font-mono">4.5 km</code>,{" "}
+            <code className="font-mono">3 hari</code>), rentang jam (
+            <code className="font-mono">08.00 - 18.00</code>), biner (
+            <code className="font-mono">Ya</code>/
+            <code className="font-mono">Tidak</code>), atau{" "}
+            <code className="font-mono">-</code> untuk imputasi otomatis.
+          </>
+        }
+        addLabel="Tambah Alternatif"
+        onAdd={handleAddAlternative}
+      />
 
       <Table>
         <TableHeader>
@@ -748,15 +791,10 @@ function AlternativesCrudTab({
         </TableHeader>
         <TableBody>
           {input.alternatives.length === 0 ? (
-            <TableRow>
-              <TableCell
-                colSpan={input.criteria.length + 4}
-                className="py-8 text-center text-sm text-muted-foreground"
-              >
-                Belum ada alternatif. Klik &ldquo;Tambah Alternatif&rdquo; untuk
-                menambah baris.
-              </TableCell>
-            </TableRow>
+            <EmptyTableRow
+              colSpan={input.criteria.length + 4}
+              message="Belum ada alternatif. Klik &ldquo;Tambah Alternatif&rdquo; untuk menambah baris."
+            />
           ) : (
             input.alternatives.map((alternative, rowIndex) => (
               <TableRow key={alternative.id}>
@@ -819,16 +857,10 @@ function AlternativesCrudTab({
                   );
                 })}
                 <TableCell className="text-right">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Hapus alternatif ${alternative.name}`}
+                  <DeleteRowButton
+                    ariaLabel={`Hapus alternatif ${alternative.name}`}
                     onClick={() => handleDeleteAlternative(alternative.id)}
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 className="size-4" aria-hidden="true" />
-                  </Button>
+                  />
                 </TableCell>
               </TableRow>
             ))
@@ -912,23 +944,11 @@ function RespondentsCrudTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs text-muted-foreground">
-          Setiap skor kepentingan responden harus bernilai positif (&gt; 0),
-          misalnya skala Likert 1–5.
-        </p>
-        <Button
-          type="button"
-          size="sm"
-          onClick={handleAddRespondent}
-          className="gap-1.5 self-start sm:self-auto"
-        >
-          <Plus className="size-3.5" aria-hidden="true" />
-          Tambah Responden
-        </Button>
-      </div>
-
-      <Separator />
+      <CrudSectionToolbar
+        description="Setiap skor kepentingan responden harus bernilai positif (> 0), misalnya skala Likert 1–5."
+        addLabel="Tambah Responden"
+        onAdd={handleAddRespondent}
+      />
 
       <Table>
         <TableHeader>
@@ -954,15 +974,10 @@ function RespondentsCrudTab({
         </TableHeader>
         <TableBody>
           {input.respondents.length === 0 ? (
-            <TableRow>
-              <TableCell
-                colSpan={input.criteria.length + 3}
-                className="py-8 text-center text-sm text-muted-foreground"
-              >
-                Belum ada responden. Klik &ldquo;Tambah Responden&rdquo; untuk
-                menambah penilai.
-              </TableCell>
-            </TableRow>
+            <EmptyTableRow
+              colSpan={input.criteria.length + 3}
+              message="Belum ada responden. Klik &ldquo;Tambah Responden&rdquo; untuk menambah penilai."
+            />
           ) : (
             input.respondents.map((respondent, rowIndex) => (
               <TableRow key={respondent.id}>
@@ -1010,16 +1025,10 @@ function RespondentsCrudTab({
                   );
                 })}
                 <TableCell className="text-right">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Hapus responden ${respondent.name}`}
+                  <DeleteRowButton
+                    ariaLabel={`Hapus responden ${respondent.name}`}
                     onClick={() => handleDeleteRespondent(respondent.id)}
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 className="size-4" aria-hidden="true" />
-                  </Button>
+                  />
                 </TableCell>
               </TableRow>
             ))

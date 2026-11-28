@@ -110,7 +110,7 @@ function parseCurrencyOrUnitNumber(text: string): number {
 }
 
 /**
- * Layer A universal cell parser: normalizes missing markers, booleans,
+ * Universal cell value parser: normalizes missing markers, booleans,
  * HH.MM-HH.MM time ranges, m/km distances, and currency/unit strings.
  */
 export function parseRawCell(

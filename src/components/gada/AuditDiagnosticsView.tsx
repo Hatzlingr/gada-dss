@@ -54,9 +54,12 @@ import {
 } from "@/lib/gada/exporter";
 import type {
   ConsistencyStatus,
+  ExcludedCriterion,
   GadaAuditTrace,
   GadaInput,
   GadaOutput,
+  ImputationLog,
+  RespondentConsistencyResult,
 } from "@/lib/gada/types";
 
 export interface AuditDiagnosticsViewProps {
@@ -200,6 +203,559 @@ const MATRIX_TABS: readonly MatrixTabConfig[] = [
   },
 ];
 
+export function AuditDiagnosticsView({
+  input,
+  result,
+}: AuditDiagnosticsViewProps) {
+  const consistencySummary = useMemo(
+    () => summarizeConsistency(result.respondentConsistency),
+    [result.respondentConsistency]
+  );
+
+  return (
+    <div className="space-y-6">
+      <PreprocessingLogsSection
+        excludedCriteria={result.excludedCriteria}
+        imputationLogs={result.imputationLogs}
+      />
+      <ConsistencyKpiStrip summary={consistencySummary} />
+      <ConsistencyTableCard
+        respondentConsistency={result.respondentConsistency}
+      />
+      <MatrixInspectorCard input={input} result={result} />
+    </div>
+  );
+}
+
+function PreprocessingLogsSection({
+  excludedCriteria,
+  imputationLogs,
+}: {
+  excludedCriteria: readonly ExcludedCriterion[];
+  imputationLogs: readonly ImputationLog[];
+}) {
+  if (excludedCriteria.length === 0 && imputationLogs.length === 0) {
+    return null;
+  }
+
+  return (
+    <section
+      aria-label="Log Praproses Otomatis"
+      className="grid grid-cols-1 gap-3 md:grid-cols-2"
+    >
+      {excludedCriteria.length > 0 ? (
+        <Alert>
+          <Info className="size-4" aria-hidden="true" />
+          <AlertTitle>
+            Kriteria Dieliminasi Otomatis ({excludedCriteria.length})
+          </AlertTitle>
+          <AlertDescription>
+            {excludedCriteria
+              .map((item) => `${item.code} (${item.name}: ${item.detail})`)
+              .join("; ")}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {imputationLogs.length > 0 ? (
+        <Alert>
+          <CheckCircle2 className="size-4" aria-hidden="true" />
+          <AlertTitle>
+            Log Imputasi Nilai Kosong ({imputationLogs.length} sel)
+          </AlertTitle>
+          <AlertDescription>
+            {imputationLogs
+              .map(
+                (log) =>
+                  `${log.alternativeName} [${log.criterionCode}] → ${log.imputedValue} (${log.strategy})`
+              )
+              .join(" • ")}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+    </section>
+  );
+}
+
+function ConsistencyKpiStrip({
+  summary,
+}: {
+  summary: ConsistencySummary | null;
+}) {
+  const kpiCards = [
+    {
+      label: "Minimum √αᵢ",
+      value: summary ? formatConsistencyMetric(summary.minItem.sqrtAlpha) : "—",
+      icon: (
+        <ArrowDownRight className="size-4 text-amber-500" aria-hidden="true" />
+      ),
+      footerLeft: summary
+        ? summary.minItem.name
+        : "Data responden tidak tersedia",
+      footerRight: summary
+        ? `α = ${formatConsistencyMetric(summary.minItem.alpha)}`
+        : null,
+    },
+    {
+      label: "Maksimum √αᵢ",
+      value: summary ? formatConsistencyMetric(summary.maxItem.sqrtAlpha) : "—",
+      icon: (
+        <ArrowUpRight className="size-4 text-emerald-500" aria-hidden="true" />
+      ),
+      footerLeft: summary
+        ? summary.maxItem.name
+        : "Data responden tidak tersedia",
+      footerRight: summary
+        ? `α = ${formatConsistencyMetric(summary.maxItem.alpha)}`
+        : null,
+    },
+    {
+      label: "Rata-rata √αᵢ Kelompok",
+      value: summary ? formatConsistencyMetric(summary.avgSqrtAlpha) : "—",
+      icon: <Users className="size-4 text-primary" aria-hidden="true" />,
+      footerLeft: summary
+        ? `Total ${summary.total} responden`
+        : "Tidak ada evaluasi AGRPC",
+      footerRight: summary
+        ? `${summary.highCount} tinggi • ${summary.moderateCount} moderat`
+        : null,
+    },
+    {
+      label: "Peringatan Konsistensi Rendah",
+      value: summary ? String(summary.lowWarningCount) : "—",
+      icon: (
+        <AlertTriangle
+          className={`size-4 ${
+            summary && summary.lowWarningCount > 0
+              ? "text-rose-500"
+              : "text-emerald-500"
+          }`}
+          aria-hidden="true"
+        />
+      ),
+      footerLeft: `Ambang batas: αᵢ < ${CONSISTENCY_THRESHOLDS.MODERATE_MIN_ALPHA.toFixed(2)}`,
+      footerRight: null,
+    },
+  ];
+
+  return (
+    <section
+      aria-label="Ringkasan Konsistensi Responden"
+      className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
+    >
+      {kpiCards.map((card) => (
+        <Card key={card.label}>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-2">
+              <CardDescription className="font-medium">
+                {card.label}
+              </CardDescription>
+              {card.icon}
+            </div>
+            <CardTitle className="font-mono text-2xl font-bold tabular-nums">
+              {card.value}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span className="truncate font-medium text-foreground">
+              {card.footerLeft}
+            </span>
+            {card.footerRight ? (
+              <span className="shrink-0 font-mono tabular-nums">
+                {card.footerRight}
+              </span>
+            ) : null}
+          </CardContent>
+        </Card>
+      ))}
+    </section>
+  );
+}
+
+function ConsistencyTableCard({
+  respondentConsistency,
+}: {
+  respondentConsistency: readonly RespondentConsistencyResult[];
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("all");
+
+  const filteredConsistency = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return respondentConsistency
+      .map((item, idx) => ({ item, respondentNumber: idx + 1 }))
+      .filter(({ item }) => {
+        if (statusFilter !== "all" && item.status !== statusFilter) {
+          return false;
+        }
+        if (query.length === 0) {
+          return true;
+        }
+        return (
+          item.name.toLowerCase().includes(query) ||
+          item.respondentId.toLowerCase().includes(query)
+        );
+      });
+  }, [respondentConsistency, searchQuery, statusFilter]);
+
+  const selectedStatusLabel =
+    STATUS_FILTER_OPTIONS.find((option) => option.value === statusFilter)
+      ?.label ?? "Semua Status";
+
+  return (
+    <Card>
+      <CardHeader className="gap-4 border-b pb-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Users className="size-4 text-primary" aria-hidden="true" />
+              Tabel Konsistensi Responden (AGRPC)
+            </CardTitle>
+            <CardDescription>
+              Menampilkan {filteredConsistency.length} dari{" "}
+              {respondentConsistency.length} responden (α ≥{" "}
+              {CONSISTENCY_THRESHOLDS.HIGH_MIN_ALPHA.toFixed(2)} tinggi,{" "}
+              {CONSISTENCY_THRESHOLDS.MODERATE_MIN_ALPHA.toFixed(2)}–
+              {CONSISTENCY_THRESHOLDS.HIGH_MIN_ALPHA.toFixed(2)} moderat, &lt;{" "}
+              {CONSISTENCY_THRESHOLDS.MODERATE_MIN_ALPHA.toFixed(2)} peringatan).
+            </CardDescription>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative w-full sm:w-56">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Cari nama responden..."
+                aria-label="Cari nama responden"
+                className="pl-8"
+              />
+            </div>
+
+            <Select
+              value={statusFilter}
+              onValueChange={(val) => {
+                if (isStatusFilterValue(val)) {
+                  setStatusFilter(val);
+                }
+              }}
+            >
+              <SelectTrigger
+                className="w-full sm:w-48"
+                aria-label="Filter status konsistensi"
+              >
+                <Filter
+                  className="size-3.5 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <SelectValue placeholder="Filter Status">
+                  {selectedStatusLabel}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="end">
+                {STATUS_FILTER_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="pt-4">
+        <div className="rounded-lg border border-border [&_[data-slot=table-container]]:max-h-[420px] [&_[data-slot=table-container]]:overflow-auto">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-background">
+              <TableRow>
+                <TableHead className="w-16">No</TableHead>
+                <TableHead>Responden</TableHead>
+                <TableHead className="text-right">Signed Area (sᵢ)</TableHead>
+                <TableHead className="text-right">|sᵢ|</TableHead>
+                <TableHead className="text-right">αᵢ</TableHead>
+                <TableHead className="text-right">√αᵢ</TableHead>
+                <TableHead className="text-right">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredConsistency.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="py-10 text-center text-sm text-muted-foreground"
+                  >
+                    Tidak ada responden yang cocok dengan filter pencarian saat
+                    ini.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredConsistency.map(({ item, respondentNumber }) => {
+                  const badge = CONSISTENCY_BADGE_META[item.status];
+                  return (
+                    <TableRow key={item.respondentId}>
+                      <TableCell className="font-mono text-xs text-muted-foreground tabular-nums">
+                        #{respondentNumber}
+                      </TableCell>
+                      <TableCell className="font-medium text-foreground">
+                        {item.name}
+                      </TableCell>
+                      <TableCell
+                        className="text-right font-mono text-xs tabular-nums"
+                        title={item.signedArea.toFixed(MATRIX_DECIMALS)}
+                      >
+                        {formatConsistencyMetric(item.signedArea)}
+                      </TableCell>
+                      <TableCell
+                        className="text-right font-mono text-xs tabular-nums"
+                        title={item.absSignedArea.toFixed(MATRIX_DECIMALS)}
+                      >
+                        {formatConsistencyMetric(item.absSignedArea)}
+                      </TableCell>
+                      <TableCell
+                        className="text-right font-mono text-xs tabular-nums"
+                        title={item.alpha.toFixed(MATRIX_DECIMALS)}
+                      >
+                        {formatConsistencyMetric(item.alpha)}
+                      </TableCell>
+                      <TableCell
+                        className="text-right font-mono text-xs font-semibold tabular-nums"
+                        title={item.sqrtAlpha.toFixed(MATRIX_DECIMALS)}
+                      >
+                        {formatConsistencyMetric(item.sqrtAlpha)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant="outline" className={badge.className}>
+                          {badge.label}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MatrixInspectorCard({
+  input,
+  result,
+}: {
+  input: GadaInput;
+  result: GadaOutput;
+}) {
+  const [activeMatrixKey, setActiveMatrixKey] =
+    useState<AuditMatrixKey>("cleanedMatrix");
+  const [copiedState, setCopiedState] = useState<{
+    key: AuditMatrixKey;
+    format: CopyFormat;
+  } | null>(null);
+  const [clipboardError, setClipboardError] = useState<string | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
+
+  const activeMatrixConfig = useMemo(
+    () =>
+      MATRIX_TABS.find((tab) => tab.key === activeMatrixKey) ??
+      DEFAULT_MATRIX_TAB,
+    [activeMatrixKey]
+  );
+
+  const activeMatrixData = useMemo(
+    () => buildMatrixTableData(activeMatrixConfig, input, result),
+    [activeMatrixConfig, input, result]
+  );
+
+  const handleCopyMatrix = async (format: CopyFormat) => {
+    if (activeMatrixData.rows.length === 0) {
+      return;
+    }
+
+    const formattedText =
+      format === "markdown"
+        ? formatMatrixAsMarkdown(activeMatrixData.headers, activeMatrixData.rows)
+        : formatMatrixAsTSV(activeMatrixData.headers, activeMatrixData.rows);
+
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard) {
+        throw new Error("Clipboard API tidak tersedia pada browser ini.");
+      }
+      await navigator.clipboard.writeText(formattedText);
+      setClipboardError(null);
+      setCopiedState({ key: activeMatrixConfig.key, format });
+
+      if (copyTimerRef.current !== null) {
+        clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = setTimeout(() => {
+        setCopiedState(null);
+      }, COPY_FEEDBACK_TIMEOUT_MS);
+    } catch (err) {
+      setClipboardError(
+        err instanceof Error
+          ? err.message
+          : "Gagal menyalin matriks ke clipboard."
+      );
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="gap-4 border-b pb-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Sigma className="size-4 text-primary" aria-hidden="true" />
+              Inspektor Matriks Perhitungan GADA (6 Tahap)
+            </CardTitle>
+            <CardDescription>
+              Telusuri seluruh matriks antara (presisi 6 desimal) dan salin
+              langsung untuk kebutuhan laporan.
+            </CardDescription>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {COPY_BUTTON_CONFIGS.map(
+              ({ format, idleLabel, copiedLabel, Icon }) => {
+                const isCopied =
+                  copiedState?.key === activeMatrixConfig.key &&
+                  copiedState.format === format;
+                return (
+                  <Button
+                    key={format}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCopyMatrix(format)}
+                    disabled={activeMatrixData.rows.length === 0}
+                    className="gap-1.5"
+                  >
+                    {isCopied ? (
+                      <Check
+                        className="size-3.5 text-emerald-600"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <Icon className="size-3.5" aria-hidden="true" />
+                    )}
+                    {isCopied ? copiedLabel : idleLabel}
+                  </Button>
+                );
+              }
+            )}
+          </div>
+        </div>
+
+        {clipboardError !== null ? (
+          <Alert variant="destructive">
+            <AlertTriangle className="size-4" aria-hidden="true" />
+            <AlertTitle>Gagal Menyalin Matriks</AlertTitle>
+            <AlertDescription>{clipboardError}</AlertDescription>
+          </Alert>
+        ) : null}
+      </CardHeader>
+
+      <CardContent className="pt-4">
+        <Tabs
+          value={activeMatrixKey}
+          onValueChange={(value) => {
+            const matched = MATRIX_TABS.find((tab) => tab.key === value);
+            if (matched) {
+              setActiveMatrixKey(matched.key);
+            }
+          }}
+          className="space-y-4"
+        >
+          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 p-1">
+            {MATRIX_TABS.map((tab) => (
+              <TabsTrigger
+                key={tab.key}
+                value={tab.key}
+                className="px-3 py-1.5 text-xs sm:text-sm"
+              >
+                {tab.tabLabel}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          <TabsContent value={activeMatrixConfig.key} className="space-y-4">
+            <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-0.5">
+                <div className="text-sm font-semibold text-foreground">
+                  {activeMatrixConfig.title}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {activeMatrixConfig.formulaDescription}
+                </p>
+              </div>
+              <Badge variant="outline" className="w-fit shrink-0 font-mono">
+                Dimensi: {activeMatrixData.rowCount} ×{" "}
+                {activeMatrixData.colCount}
+              </Badge>
+            </div>
+
+            <div className="rounded-lg border border-border [&_[data-slot=table-container]]:max-h-[480px] [&_[data-slot=table-container]]:overflow-auto">
+              <Table>
+                <TableHeader className="sticky top-0 z-20 bg-background">
+                  <TableRow>
+                    {activeMatrixData.headers.map((header, colIdx) => (
+                      <TableHead
+                        key={`${activeMatrixConfig.key}-head-${colIdx}`}
+                        className={
+                          colIdx === 0
+                            ? "sticky left-0 z-30 min-w-[180px] border-r border-border bg-background font-semibold"
+                            : "text-right font-mono text-xs"
+                        }
+                      >
+                        {header}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {activeMatrixData.rows.map((rowCells, rowIdx) => (
+                    <TableRow key={`${activeMatrixConfig.key}-row-${rowIdx}`}>
+                      {rowCells.map((cell, colIdx) => (
+                        <TableCell
+                          key={`${activeMatrixConfig.key}-cell-${rowIdx}-${colIdx}`}
+                          className={
+                            colIdx === 0
+                              ? "sticky left-0 z-10 border-r border-border bg-background font-medium text-foreground"
+                              : "text-right font-mono text-xs tabular-nums"
+                          }
+                        >
+                          {cell}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </CardContent>
+    </Card>
+  );
+}
+
 function formatConsistencyMetric(value: number): string {
   return value.toFixed(SUMMARY_DECIMALS);
 }
@@ -276,510 +832,4 @@ function buildMatrixTableData(
     colCount: colHeaders.length,
     rowCount: rows.length,
   };
-}
-
-function ConsistencyKpiStrip({
-  summary,
-}: {
-  summary: ConsistencySummary | null;
-}) {
-  const kpiCards = [
-    {
-      label: "Minimum √αᵢ",
-      value: summary ? formatConsistencyMetric(summary.minItem.sqrtAlpha) : "—",
-      icon: <ArrowDownRight className="size-4 text-amber-500" aria-hidden="true" />,
-      footerLeft: summary ? summary.minItem.name : "Data responden tidak tersedia",
-      footerRight: summary
-        ? `α = ${formatConsistencyMetric(summary.minItem.alpha)}`
-        : null,
-    },
-    {
-      label: "Maksimum √αᵢ",
-      value: summary ? formatConsistencyMetric(summary.maxItem.sqrtAlpha) : "—",
-      icon: <ArrowUpRight className="size-4 text-emerald-500" aria-hidden="true" />,
-      footerLeft: summary ? summary.maxItem.name : "Data responden tidak tersedia",
-      footerRight: summary
-        ? `α = ${formatConsistencyMetric(summary.maxItem.alpha)}`
-        : null,
-    },
-    {
-      label: "Rata-rata √αᵢ Kelompok",
-      value: summary ? formatConsistencyMetric(summary.avgSqrtAlpha) : "—",
-      icon: <Users className="size-4 text-primary" aria-hidden="true" />,
-      footerLeft: summary ? `Total ${summary.total} responden` : "Tidak ada evaluasi AGRPC",
-      footerRight: summary
-        ? `${summary.highCount} tinggi • ${summary.moderateCount} moderat`
-        : null,
-    },
-    {
-      label: "Peringatan Konsistensi Rendah",
-      value: summary ? String(summary.lowWarningCount) : "—",
-      icon: (
-        <AlertTriangle
-          className={`size-4 ${
-            summary && summary.lowWarningCount > 0
-              ? "text-rose-500"
-              : "text-emerald-500"
-          }`}
-          aria-hidden="true"
-        />
-      ),
-      footerLeft: `Ambang batas: αᵢ < ${CONSISTENCY_THRESHOLDS.MODERATE_MIN_ALPHA.toFixed(2)}`,
-      footerRight: null,
-    },
-  ];
-
-  return (
-    <section
-      aria-label="Ringkasan Konsistensi Responden"
-      className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
-    >
-      {kpiCards.map((card) => (
-        <Card key={card.label}>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between gap-2">
-              <CardDescription className="font-medium">
-                {card.label}
-              </CardDescription>
-              {card.icon}
-            </div>
-            <CardTitle className="font-mono text-2xl font-bold tabular-nums">
-              {card.value}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span className="truncate font-medium text-foreground">
-              {card.footerLeft}
-            </span>
-            {card.footerRight ? (
-              <span className="shrink-0 font-mono tabular-nums">
-                {card.footerRight}
-              </span>
-            ) : null}
-          </CardContent>
-        </Card>
-      ))}
-    </section>
-  );
-}
-
-export function AuditDiagnosticsView({
-  input,
-  result,
-}: AuditDiagnosticsViewProps) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("all");
-  const [activeMatrixKey, setActiveMatrixKey] =
-    useState<AuditMatrixKey>("cleanedMatrix");
-  const [copiedState, setCopiedState] = useState<{
-    key: AuditMatrixKey;
-    format: CopyFormat;
-  } | null>(null);
-  const [clipboardError, setClipboardError] = useState<string | null>(null);
-
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (copyTimerRef.current !== null) {
-        clearTimeout(copyTimerRef.current);
-      }
-    };
-  }, []);
-
-  const consistencySummary = useMemo(
-    () => summarizeConsistency(result.respondentConsistency),
-    [result.respondentConsistency]
-  );
-
-  const filteredConsistency = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-
-    return result.respondentConsistency
-      .map((item, idx) => ({ item, respondentNumber: idx + 1 }))
-      .filter(({ item }) => {
-        if (statusFilter !== "all" && item.status !== statusFilter) {
-          return false;
-        }
-        if (query.length === 0) {
-          return true;
-        }
-        return (
-          item.name.toLowerCase().includes(query) ||
-          item.respondentId.toLowerCase().includes(query)
-        );
-      });
-  }, [result.respondentConsistency, searchQuery, statusFilter]);
-
-  const selectedStatusLabel =
-    STATUS_FILTER_OPTIONS.find((option) => option.value === statusFilter)
-      ?.label ?? "Semua Status";
-
-  const activeMatrixConfig = useMemo(
-    () =>
-      MATRIX_TABS.find((tab) => tab.key === activeMatrixKey) ??
-      DEFAULT_MATRIX_TAB,
-    [activeMatrixKey]
-  );
-
-  const activeMatrixData = useMemo(
-    () => buildMatrixTableData(activeMatrixConfig, input, result),
-    [activeMatrixConfig, input, result]
-  );
-
-  const handleCopyMatrix = async (format: CopyFormat) => {
-    if (activeMatrixData.rows.length === 0) {
-      return;
-    }
-
-    const formattedText =
-      format === "markdown"
-        ? formatMatrixAsMarkdown(activeMatrixData.headers, activeMatrixData.rows)
-        : formatMatrixAsTSV(activeMatrixData.headers, activeMatrixData.rows);
-
-    try {
-      if (typeof navigator === "undefined" || !navigator.clipboard) {
-        throw new Error("Clipboard API tidak tersedia pada browser ini.");
-      }
-      await navigator.clipboard.writeText(formattedText);
-      setClipboardError(null);
-      setCopiedState({ key: activeMatrixConfig.key, format });
-
-      if (copyTimerRef.current !== null) {
-        clearTimeout(copyTimerRef.current);
-      }
-      copyTimerRef.current = setTimeout(() => {
-        setCopiedState(null);
-      }, COPY_FEEDBACK_TIMEOUT_MS);
-    } catch (err) {
-      setClipboardError(
-        err instanceof Error
-          ? err.message
-          : "Gagal menyalin matriks ke clipboard."
-      );
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      {result.excludedCriteria.length > 0 || result.imputationLogs.length > 0 ? (
-        <section
-          aria-label="Log Praproses Otomatis"
-          className="grid grid-cols-1 gap-3 md:grid-cols-2"
-        >
-          {result.excludedCriteria.length > 0 ? (
-            <Alert>
-              <Info className="size-4" aria-hidden="true" />
-              <AlertTitle>
-                Kriteria Dieliminasi Otomatis ({result.excludedCriteria.length})
-              </AlertTitle>
-              <AlertDescription>
-                {result.excludedCriteria
-                  .map((item) => `${item.code} (${item.name}: ${item.detail})`)
-                  .join("; ")}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-
-          {result.imputationLogs.length > 0 ? (
-            <Alert>
-              <CheckCircle2 className="size-4" aria-hidden="true" />
-              <AlertTitle>
-                Log Imputasi Nilai Kosong ({result.imputationLogs.length} sel)
-              </AlertTitle>
-              <AlertDescription>
-                {result.imputationLogs
-                  .map(
-                    (log) =>
-                      `${log.alternativeName} [${log.criterionCode}] → ${log.imputedValue} (${log.strategy})`
-                  )
-                  .join(" • ")}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-        </section>
-      ) : null}
-
-      <ConsistencyKpiStrip summary={consistencySummary} />
-
-      <Card>
-        <CardHeader className="gap-4 border-b pb-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Users className="size-4 text-primary" aria-hidden="true" />
-                Tabel Konsistensi Responden (AGRPC)
-              </CardTitle>
-              <CardDescription>
-                Menampilkan {filteredConsistency.length} dari{" "}
-                {result.respondentConsistency.length} responden (α ≥{" "}
-                {CONSISTENCY_THRESHOLDS.HIGH_MIN_ALPHA.toFixed(2)} tinggi,{" "}
-                {CONSISTENCY_THRESHOLDS.MODERATE_MIN_ALPHA.toFixed(2)}–
-                {CONSISTENCY_THRESHOLDS.HIGH_MIN_ALPHA.toFixed(2)} moderat, &lt;{" "}
-                {CONSISTENCY_THRESHOLDS.MODERATE_MIN_ALPHA.toFixed(2)}{" "}
-                peringatan).
-              </CardDescription>
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="relative w-full sm:w-56">
-                <Search
-                  className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <Input
-                  type="search"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Cari nama responden..."
-                  aria-label="Cari nama responden"
-                  className="pl-8"
-                />
-              </div>
-
-              <Select
-                value={statusFilter}
-                onValueChange={(val) => {
-                  if (isStatusFilterValue(val)) {
-                    setStatusFilter(val);
-                  }
-                }}
-              >
-                <SelectTrigger
-                  className="w-full sm:w-48"
-                  aria-label="Filter status konsistensi"
-                >
-                  <Filter
-                    className="size-3.5 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <SelectValue placeholder="Filter Status">
-                    {selectedStatusLabel}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent align="end">
-                  {STATUS_FILTER_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent className="pt-4">
-          <div className="rounded-lg border border-border [&_[data-slot=table-container]]:max-h-[420px] [&_[data-slot=table-container]]:overflow-auto">
-            <Table>
-              <TableHeader className="sticky top-0 z-10 bg-background">
-                <TableRow>
-                  <TableHead className="w-16">No</TableHead>
-                  <TableHead>Responden</TableHead>
-                  <TableHead className="text-right">Signed Area (sᵢ)</TableHead>
-                  <TableHead className="text-right">|sᵢ|</TableHead>
-                  <TableHead className="text-right">αᵢ</TableHead>
-                  <TableHead className="text-right">√αᵢ</TableHead>
-                  <TableHead className="text-right">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredConsistency.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="py-10 text-center text-sm text-muted-foreground"
-                    >
-                      Tidak ada responden yang cocok dengan filter pencarian
-                      saat ini.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredConsistency.map(({ item, respondentNumber }) => {
-                    const badge = CONSISTENCY_BADGE_META[item.status];
-                    return (
-                      <TableRow key={item.respondentId}>
-                        <TableCell className="font-mono text-xs text-muted-foreground tabular-nums">
-                          #{respondentNumber}
-                        </TableCell>
-                        <TableCell className="font-medium text-foreground">
-                          {item.name}
-                        </TableCell>
-                        <TableCell
-                          className="text-right font-mono text-xs tabular-nums"
-                          title={item.signedArea.toFixed(MATRIX_DECIMALS)}
-                        >
-                          {formatConsistencyMetric(item.signedArea)}
-                        </TableCell>
-                        <TableCell
-                          className="text-right font-mono text-xs tabular-nums"
-                          title={item.absSignedArea.toFixed(MATRIX_DECIMALS)}
-                        >
-                          {formatConsistencyMetric(item.absSignedArea)}
-                        </TableCell>
-                        <TableCell
-                          className="text-right font-mono text-xs tabular-nums"
-                          title={item.alpha.toFixed(MATRIX_DECIMALS)}
-                        >
-                          {formatConsistencyMetric(item.alpha)}
-                        </TableCell>
-                        <TableCell
-                          className="text-right font-mono text-xs font-semibold tabular-nums"
-                          title={item.sqrtAlpha.toFixed(MATRIX_DECIMALS)}
-                        >
-                          {formatConsistencyMetric(item.sqrtAlpha)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant="outline" className={badge.className}>
-                            {badge.label}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="gap-4 border-b pb-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Sigma className="size-4 text-primary" aria-hidden="true" />
-                Inspektor Matriks Perhitungan GADA (6 Tahap)
-              </CardTitle>
-              <CardDescription>
-                Telusuri seluruh matriks antara (presisi 6 desimal) dan salin
-                langsung untuk kebutuhan laporan.
-              </CardDescription>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {COPY_BUTTON_CONFIGS.map(
-                ({ format, idleLabel, copiedLabel, Icon }) => {
-                  const isCopied =
-                    copiedState?.key === activeMatrixConfig.key &&
-                    copiedState.format === format;
-                  return (
-                    <Button
-                      key={format}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleCopyMatrix(format)}
-                      disabled={activeMatrixData.rows.length === 0}
-                      className="gap-1.5"
-                    >
-                      {isCopied ? (
-                        <Check
-                          className="size-3.5 text-emerald-600"
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <Icon className="size-3.5" aria-hidden="true" />
-                      )}
-                      {isCopied ? copiedLabel : idleLabel}
-                    </Button>
-                  );
-                }
-              )}
-            </div>
-          </div>
-
-          {clipboardError !== null ? (
-            <Alert variant="destructive">
-              <AlertTriangle className="size-4" aria-hidden="true" />
-              <AlertTitle>Gagal Menyalin Matriks</AlertTitle>
-              <AlertDescription>{clipboardError}</AlertDescription>
-            </Alert>
-          ) : null}
-        </CardHeader>
-
-        <CardContent className="pt-4">
-          <Tabs
-            value={activeMatrixKey}
-            onValueChange={(value) => {
-              const matched = MATRIX_TABS.find((tab) => tab.key === value);
-              if (matched) {
-                setActiveMatrixKey(matched.key);
-              }
-            }}
-            className="space-y-4"
-          >
-            <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 p-1">
-              {MATRIX_TABS.map((tab) => (
-                <TabsTrigger
-                  key={tab.key}
-                  value={tab.key}
-                  className="px-3 py-1.5 text-xs sm:text-sm"
-                >
-                  {tab.tabLabel}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-
-            <TabsContent value={activeMatrixConfig.key} className="space-y-4">
-              <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="space-y-0.5">
-                  <div className="text-sm font-semibold text-foreground">
-                    {activeMatrixConfig.title}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {activeMatrixConfig.formulaDescription}
-                  </p>
-                </div>
-                <Badge variant="outline" className="w-fit shrink-0 font-mono">
-                  Dimensi: {activeMatrixData.rowCount} ×{" "}
-                  {activeMatrixData.colCount}
-                </Badge>
-              </div>
-
-              <div className="rounded-lg border border-border [&_[data-slot=table-container]]:max-h-[480px] [&_[data-slot=table-container]]:overflow-auto">
-                <Table>
-                  <TableHeader className="sticky top-0 z-20 bg-background">
-                    <TableRow>
-                      {activeMatrixData.headers.map((header, colIdx) => (
-                        <TableHead
-                          key={`${activeMatrixConfig.key}-head-${colIdx}`}
-                          className={
-                            colIdx === 0
-                              ? "sticky left-0 z-30 min-w-[180px] border-r border-border bg-background font-semibold"
-                              : "text-right font-mono text-xs"
-                          }
-                        >
-                          {header}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {activeMatrixData.rows.map((rowCells, rowIdx) => (
-                      <TableRow key={`${activeMatrixConfig.key}-row-${rowIdx}`}>
-                        {rowCells.map((cell, colIdx) => (
-                          <TableCell
-                            key={`${activeMatrixConfig.key}-cell-${rowIdx}-${colIdx}`}
-                            className={
-                              colIdx === 0
-                                ? "sticky left-0 z-10 border-r border-border bg-background font-medium text-foreground"
-                                : "text-right font-mono text-xs tabular-nums"
-                            }
-                          >
-                            {cell}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
-    </div>
-  );
 }
