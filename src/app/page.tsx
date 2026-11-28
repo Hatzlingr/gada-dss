@@ -5,10 +5,12 @@ import {
   AlertCircle,
   BarChart3,
   Database,
+  Download,
   FileSpreadsheet,
   RotateCcw,
   SlidersHorizontal,
 } from "lucide-react";
+import { AuditDiagnosticsView } from "@/components/gada/AuditDiagnosticsView";
 import { DataEditor } from "@/components/gada/DataEditor";
 import { ResultsView } from "@/components/gada/ResultsView";
 import { SimulatorView } from "@/components/gada/SimulatorView";
@@ -17,7 +19,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -25,49 +26,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { laundrySeedInput } from "@/data/laundry-seed";
 import { runGadaAnalysis } from "@/lib/gada/engine";
+import { exportGadaOutputToExcel } from "@/lib/gada/exporter";
 import type { GadaInput, GadaOutput } from "@/lib/gada/types";
-
-interface AuditDiagnosticsPlaceholderProps {
-  input: GadaInput;
-  result: GadaOutput;
-}
-
-function AuditDiagnosticsPlaceholder({
-  input,
-  result,
-}: AuditDiagnosticsPlaceholderProps) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileSpreadsheet className="size-4 text-primary" aria-hidden="true" />
-          Audit &amp; Ekspor
-        </CardTitle>
-        <CardDescription>
-          Modul Jejak Perhitungan &amp; Ekspor Laporan — disiapkan untuk integrasi AuditDiagnosticsView
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4 text-sm text-muted-foreground">
-        <p>
-          Panel ini siap menerima komponen <code className="font-mono text-foreground">AuditDiagnosticsView</code> dengan kontrak{" "}
-          <code className="font-mono text-foreground">input</code> dan{" "}
-          <code className="font-mono text-foreground">result</code>.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline">
-            Dataset: {input.datasetName ?? "Tanpa Judul"}
-          </Badge>
-          <Badge variant="outline">
-            {result.imputationLogs.length} Log Imputasi
-          </Badge>
-          <Badge variant="outline">
-            {result.excludedCriteria.length} Kriteria Dieliminasi
-          </Badge>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 function InvalidResultCard({ description }: { description: string }) {
   return (
@@ -108,6 +68,13 @@ export default function HomePage() {
     setGadaInput(laundrySeedInput);
   };
 
+  const handleExportExcel = () => {
+    if (!analysis.result) {
+      return;
+    }
+    exportGadaOutputToExcel(gadaInput, analysis.result);
+  };
+
   return (
     <div className="min-h-screen bg-muted/30">
       <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -130,8 +97,20 @@ export default function HomePage() {
             </div>
           </div>
 
-          {isModified ? (
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {analysis.result ? (
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={handleExportExcel}
+                className="gap-1.5"
+              >
+                <Download className="size-3.5" aria-hidden="true" />
+                Export Excel
+              </Button>
+            ) : null}
+            {isModified ? (
               <Button
                 type="button"
                 variant="outline"
@@ -142,8 +121,8 @@ export default function HomePage() {
                 <RotateCcw className="size-3.5" aria-hidden="true" />
                 Reset UNSRI Preset
               </Button>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
       </header>
 
@@ -178,7 +157,10 @@ export default function HomePage() {
 
           <TabsContent value="results">
             {analysis.result ? (
-              <ResultsView result={analysis.result} />
+              <ResultsView
+                result={analysis.result}
+                onExportExcel={handleExportExcel}
+              />
             ) : (
               <InvalidResultCard description="Perbaiki error validasi pada banner di atas atau klik Reset UNSRI Preset untuk menampilkan hasil peringkat GADA." />
             )}
@@ -207,7 +189,7 @@ export default function HomePage() {
 
           <TabsContent value="audit">
             {analysis.result ? (
-              <AuditDiagnosticsPlaceholder
+              <AuditDiagnosticsView
                 input={gadaInput}
                 result={analysis.result}
               />
