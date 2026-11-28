@@ -8,11 +8,6 @@ export type ImputationStrategy =
 
 export type ConsistencyStatus = "high" | "moderate" | "low_warning";
 
-export type RecommendationTier =
-  | "Sangat Direkomendasikan"
-  | "Direkomendasikan"
-  | "Kurang Direkomendasikan";
-
 export type RawCellValue = string | number | boolean | null | undefined;
 
 export interface CriterionConfig {
@@ -33,14 +28,9 @@ export interface AlternativeItem {
   address?: string;
 }
 
-export type AlternativeRow = AlternativeItem;
-
 export interface RespondentItem {
   id: string;
   name: string;
-  faculty?: string;
-  major?: string;
-  batch?: string | number;
 }
 
 export interface GadaOptions {
@@ -99,8 +89,6 @@ export interface RespondentConsistencyResult {
   status: ConsistencyStatus;
 }
 
-export type RespondentConsistency = RespondentConsistencyResult;
-
 export interface AlternativeRankingResult {
   alternativeId: string;
   name: string;
@@ -108,10 +96,7 @@ export interface AlternativeRankingResult {
   gadaIndex: number;
   relativeScore: number;
   rank: number;
-  tier: RecommendationTier;
 }
-
-export type AlternativeResult = AlternativeRankingResult;
 
 export interface GadaAuditTrace {
   cleanedMatrix: number[][];
@@ -130,14 +115,4 @@ export interface GadaOutput {
   respondentConsistency: RespondentConsistencyResult[];
   rankings: AlternativeRankingResult[];
   auditTrace: GadaAuditTrace;
-}
-
-export interface SimulationComparisonRow {
-  alternativeId: string;
-  name: string;
-  groupRank: number;
-  personalRank: number;
-  rankDelta: number;
-  groupScore: number;
-  personalScore: number;
 }

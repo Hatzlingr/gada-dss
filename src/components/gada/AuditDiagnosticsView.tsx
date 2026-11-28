@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity,
   AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
@@ -10,8 +9,6 @@ import {
   CheckCircle2,
   ClipboardList,
   Copy,
-  Download,
-  FileSpreadsheet,
   Filter,
   Info,
   Search,
@@ -36,7 +33,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -48,7 +44,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CONSISTENCY_THRESHOLDS } from "@/lib/gada/constants";
 import {
-  exportGadaOutputToExcel,
   formatMatrixAsMarkdown,
   formatMatrixAsTSV,
   type MatrixCellValue,
@@ -59,7 +54,6 @@ import type {
   GadaInput,
   GadaOutput,
   RespondentConsistencyResult,
-  RespondentItem,
 } from "@/lib/gada/types";
 
 export interface AuditDiagnosticsViewProps {
@@ -101,7 +95,7 @@ const DEFAULT_MATRIX_TAB: MatrixTabConfig = {
   tabLabel: "1. Cleaned (A)",
   title: "Matriks Keputusan Bersih (A = [aⱼₖ])",
   formulaDescription:
-    "Data alternatif setelah parsing unit/waktu/biner, imputasi nilai kosong, dan eliminasi kriteria varians nol (S × M).",
+    "Data alternatif setelah normalisasi satuan/waktu/biner, imputasi nilai kosong, dan eliminasi kriteria varians nol (S × M).",
   rowHeader: "Alternatif",
   rowKind: "alternatives",
   colKind: "criteria",
@@ -211,25 +205,6 @@ function getConsistencyBadgeMeta(status: ConsistencyStatus): {
   };
 }
 
-function formatRespondentSubtitle(
-  meta: RespondentItem | undefined
-): string | null {
-  if (!meta) {
-    return null;
-  }
-  const parts: string[] = [];
-  if (meta.faculty) {
-    parts.push(meta.faculty);
-  }
-  if (meta.major) {
-    parts.push(meta.major);
-  }
-  if (meta.batch !== undefined && String(meta.batch).trim().length > 0) {
-    parts.push(`Angkatan ${String(meta.batch)}`);
-  }
-  return parts.length > 0 ? parts.join(" • ") : null;
-}
-
 interface ConsistencySummary {
   total: number;
   minItem: RespondentConsistencyResult;
@@ -300,13 +275,19 @@ function buildMatrixTableData(
 
   const colHeaders =
     config.colKind === "criteria"
-      ? result.activeCriteria.map((criterion) => `${criterion.code} (${criterion.name})`)
-      : input.respondents.map((respondent, idx) => `R${idx + 1} ${respondent.name}`);
+      ? result.activeCriteria.map(
+          (criterion) => `${criterion.code} (${criterion.name})`
+        )
+      : input.respondents.map(
+          (respondent, idx) => `R${idx + 1} ${respondent.name}`
+        );
 
   const rowLabels =
     config.rowKind === "alternatives"
       ? input.alternatives.map((alternative) => alternative.name)
-      : input.respondents.map((respondent, idx) => `R${idx + 1} — ${respondent.name}`);
+      : input.respondents.map(
+          (respondent, idx) => `R${idx + 1} — ${respondent.name}`
+        );
 
   const headers = [config.rowHeader, ...colHeaders];
 
@@ -338,11 +319,11 @@ function buildMatrixTableData(
   };
 }
 
-interface ConsistencyKpiStripProps {
+function ConsistencyKpiStrip({
+  summary,
+}: {
   summary: ConsistencySummary | null;
-}
-
-function ConsistencyKpiStrip({ summary }: ConsistencyKpiStripProps) {
+}) {
   return (
     <section
       aria-label="Ringkasan Konsistensi Responden"
@@ -374,7 +355,7 @@ function ConsistencyKpiStrip({ summary }: ConsistencyKpiStripProps) {
               </span>
             </div>
           ) : (
-            <span>Mode override bobot aktif</span>
+            <span>Data responden tidak tersedia</span>
           )}
         </CardContent>
       </Card>
@@ -405,7 +386,7 @@ function ConsistencyKpiStrip({ summary }: ConsistencyKpiStripProps) {
               </span>
             </div>
           ) : (
-            <span>Mode override bobot aktif</span>
+            <span>Data responden tidak tersedia</span>
           )}
         </CardContent>
       </Card>
@@ -490,14 +471,6 @@ export function AuditDiagnosticsView({
     };
   }, []);
 
-  const respondentById = useMemo(
-    () =>
-      new Map<string, RespondentItem>(
-        input.respondents.map((respondent) => [respondent.id, respondent])
-      ),
-    [input.respondents]
-  );
-
   const consistencySummary = useMemo(
     () => computeConsistencySummary(result.respondentConsistency),
     [result.respondentConsistency]
@@ -522,31 +495,23 @@ export function AuditDiagnosticsView({
       if (query.length === 0) {
         return true;
       }
-
-      const meta = respondentById.get(item.respondentId);
-      const haystack = [
-        item.name,
-        item.respondentId,
-        meta?.faculty ?? "",
-        meta?.major ?? "",
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      return haystack.includes(query);
+      return (
+        item.name.toLowerCase().includes(query) ||
+        item.respondentId.toLowerCase().includes(query)
+      );
     });
-  }, [indexedConsistency, respondentById, searchQuery, statusFilter]);
+  }, [indexedConsistency, searchQuery, statusFilter]);
 
   const selectedStatusLabel =
     STATUS_FILTER_OPTIONS.find((option) => option.value === statusFilter)
       ?.label ?? "Semua Status";
 
-  const activeMatrixConfig = useMemo(() => {
-    return (
+  const activeMatrixConfig = useMemo(
+    () =>
       MATRIX_TABS.find((tab) => tab.key === activeMatrixKey) ??
-      DEFAULT_MATRIX_TAB
-    );
-  }, [activeMatrixKey]);
+      DEFAULT_MATRIX_TAB,
+    [activeMatrixKey]
+  );
 
   const activeMatrixData = useMemo(
     () => buildMatrixTableData(activeMatrixConfig, input, result),
@@ -604,10 +569,6 @@ export function AuditDiagnosticsView({
     }
   };
 
-  const handleExportExcel = () => {
-    exportGadaOutputToExcel(input, result);
-  };
-
   const isMarkdownCopied =
     copiedState?.key === activeMatrixConfig.key &&
     copiedState.format === "markdown";
@@ -616,63 +577,44 @@ export function AuditDiagnosticsView({
 
   return (
     <div className="space-y-6">
-      {/* Top Action & Preprocessing Summary Header */}
-      <Card>
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Activity className="size-4 text-primary" aria-hidden="true" />
-              Monitor Konsistensi &amp; Jejak Audit Matematis GADA
-            </CardTitle>
-            <CardDescription>
-              Verifikasi nilai AGRPC responden (αᵢ, √αᵢ), log praproses dua lapis, serta 6 matriks transformasi langkah demi langkah.
-            </CardDescription>
-          </div>
-          <Button
-            type="button"
-            onClick={handleExportExcel}
-            className="gap-1.5 self-start sm:self-auto"
-          >
-            <Download className="size-4" aria-hidden="true" />
-            Export 4-Sheet Excel Report
-          </Button>
-        </CardHeader>
+      {result.excludedCriteria.length > 0 || result.imputationLogs.length > 0 ? (
+        <section
+          aria-label="Log Praproses Otomatis"
+          className="grid grid-cols-1 gap-3 md:grid-cols-2"
+        >
+          {result.excludedCriteria.length > 0 ? (
+            <Alert>
+              <Info className="size-4" aria-hidden="true" />
+              <AlertTitle>
+                Kriteria Dieliminasi Otomatis ({result.excludedCriteria.length})
+              </AlertTitle>
+              <AlertDescription>
+                {result.excludedCriteria
+                  .map((item) => `${item.code} (${item.name}: ${item.detail})`)
+                  .join("; ")}
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
-        {result.excludedCriteria.length > 0 || result.imputationLogs.length > 0 ? (
-          <>
-            <Separator />
-            <CardContent className="grid grid-cols-1 gap-3 pt-4 md:grid-cols-2">
-              <Alert>
-                <Info className="size-4" aria-hidden="true" />
-                <AlertTitle>
-                  Kriteria Dieliminasi ({result.excludedCriteria.length})
-                </AlertTitle>
-                <AlertDescription>
-                  {result.excludedCriteria.length === 0
-                    ? "Seluruh kriteria aktif lolos ke perhitungan."
-                    : result.excludedCriteria
-                        .map((item) => `${item.code} (${item.name}: ${item.reason})`)
-                        .join("; ")}
-                </AlertDescription>
-              </Alert>
+          {result.imputationLogs.length > 0 ? (
+            <Alert>
+              <CheckCircle2 className="size-4" aria-hidden="true" />
+              <AlertTitle>
+                Log Imputasi Nilai Kosong ({result.imputationLogs.length} sel)
+              </AlertTitle>
+              <AlertDescription>
+                {result.imputationLogs
+                  .map(
+                    (log) =>
+                      `${log.alternativeName} [${log.criterionCode}] → ${log.imputedValue} (${log.strategy})`
+                  )
+                  .join(" • ")}
+              </AlertDescription>
+            </Alert>
+          ) : null}
+        </section>
+      ) : null}
 
-              <Alert>
-                <CheckCircle2 className="size-4" aria-hidden="true" />
-                <AlertTitle>
-                  Log Imputasi Nilai Kosong ({result.imputationLogs.length} sel)
-                </AlertTitle>
-                <AlertDescription>
-                  {result.imputationLogs.length === 0
-                    ? "Tidak ada sel kosong yang perlu diimputasi."
-                    : `${result.imputationLogs.length} sel kosong telah diimputasi otomatis sesuai strategi masing-masing kriteria.`}
-                </AlertDescription>
-              </Alert>
-            </CardContent>
-          </>
-        ) : null}
-      </Card>
-
-      {/* Section A: Respondent Consistency Monitor */}
       <ConsistencyKpiStrip summary={consistencySummary} />
 
       <Card>
@@ -689,12 +631,13 @@ export function AuditDiagnosticsView({
                 {CONSISTENCY_THRESHOLDS.HIGH_MIN_ALPHA.toFixed(2)} tinggi,{" "}
                 {CONSISTENCY_THRESHOLDS.MODERATE_MIN_ALPHA.toFixed(2)}–
                 {CONSISTENCY_THRESHOLDS.HIGH_MIN_ALPHA.toFixed(2)} moderat, &lt;{" "}
-                {CONSISTENCY_THRESHOLDS.MODERATE_MIN_ALPHA.toFixed(2)} peringatan).
+                {CONSISTENCY_THRESHOLDS.MODERATE_MIN_ALPHA.toFixed(2)}{" "}
+                peringatan).
               </CardDescription>
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="relative w-full sm:w-64">
+              <div className="relative w-full sm:w-56">
                 <Search
                   className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
                   aria-hidden="true"
@@ -703,13 +646,16 @@ export function AuditDiagnosticsView({
                   type="search"
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Cari nama atau prodi..."
-                  aria-label="Cari responden berdasarkan nama atau prodi"
+                  placeholder="Cari nama responden..."
+                  aria-label="Cari nama responden"
                   className="pl-8"
                 />
               </div>
 
-              <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
+              <Select
+                value={statusFilter}
+                onValueChange={handleStatusFilterChange}
+              >
                 <SelectTrigger
                   className="w-full sm:w-48"
                   aria-label="Filter status konsistensi"
@@ -735,111 +681,91 @@ export function AuditDiagnosticsView({
         </CardHeader>
 
         <CardContent className="pt-4">
-          {result.respondentConsistency.length === 0 ? (
-            <Alert>
-              <Info className="size-4" aria-hidden="true" />
-              <AlertTitle>Evaluasi AGRPC Responden Dilewati</AlertTitle>
-              <AlertDescription>
-                Bobot override personal sedang aktif sehingga perhitungan konsistensi antar-responden tidak dijalankan.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <div className="rounded-lg border border-border [&_[data-slot=table-container]]:max-h-[420px] [&_[data-slot=table-container]]:overflow-auto">
-              <Table>
-                <TableHeader className="sticky top-0 z-10 bg-background">
+          <div className="rounded-lg border border-border [&_[data-slot=table-container]]:max-h-[420px] [&_[data-slot=table-container]]:overflow-auto">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-background">
+                <TableRow>
+                  <TableHead className="w-16">No</TableHead>
+                  <TableHead>Responden</TableHead>
+                  <TableHead className="text-right">Signed Area (sᵢ)</TableHead>
+                  <TableHead className="text-right">|sᵢ|</TableHead>
+                  <TableHead className="text-right">αᵢ</TableHead>
+                  <TableHead className="text-right">√αᵢ</TableHead>
+                  <TableHead className="text-right">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredConsistency.length === 0 ? (
                   <TableRow>
-                    <TableHead className="w-16">No</TableHead>
-                    <TableHead>Responden</TableHead>
-                    <TableHead className="text-right">Signed Area (sᵢ)</TableHead>
-                    <TableHead className="text-right">|sᵢ|</TableHead>
-                    <TableHead className="text-right">αᵢ</TableHead>
-                    <TableHead className="text-right">√αᵢ</TableHead>
-                    <TableHead className="text-right">Status</TableHead>
+                    <TableCell
+                      colSpan={7}
+                      className="py-10 text-center text-sm text-muted-foreground"
+                    >
+                      Tidak ada responden yang cocok dengan filter pencarian
+                      saat ini.
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredConsistency.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={7}
-                        className="py-10 text-center text-sm text-muted-foreground"
-                      >
-                        Tidak ada responden yang cocok dengan filter pencarian saat ini.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredConsistency.map(({ item, respondentNumber }) => {
-                      const badge = getConsistencyBadgeMeta(item.status);
-                      const subtitle = formatRespondentSubtitle(
-                        respondentById.get(item.respondentId)
-                      );
-
-                      return (
-                        <TableRow key={item.respondentId}>
-                          <TableCell className="font-mono text-xs text-muted-foreground tabular-nums">
-                            #{respondentNumber}
-                          </TableCell>
-                          <TableCell className="whitespace-normal">
-                            <div className="font-medium text-foreground">
-                              {item.name}
-                            </div>
-                            {subtitle ? (
-                              <div className="text-xs text-muted-foreground">
-                                {subtitle}
-                              </div>
-                            ) : null}
-                          </TableCell>
-                          <TableCell
-                            className="text-right font-mono text-xs tabular-nums"
-                            title={item.signedArea.toFixed(MATRIX_DECIMALS)}
-                          >
-                            {formatConsistencyMetric(item.signedArea)}
-                          </TableCell>
-                          <TableCell
-                            className="text-right font-mono text-xs tabular-nums"
-                            title={item.absSignedArea.toFixed(MATRIX_DECIMALS)}
-                          >
-                            {formatConsistencyMetric(item.absSignedArea)}
-                          </TableCell>
-                          <TableCell
-                            className="text-right font-mono text-xs tabular-nums"
-                            title={item.alpha.toFixed(MATRIX_DECIMALS)}
-                          >
-                            {formatConsistencyMetric(item.alpha)}
-                          </TableCell>
-                          <TableCell
-                            className="text-right font-mono text-xs font-semibold tabular-nums"
-                            title={item.sqrtAlpha.toFixed(MATRIX_DECIMALS)}
-                          >
-                            {formatConsistencyMetric(item.sqrtAlpha)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Badge variant="outline" className={badge.className}>
-                              {badge.label}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                ) : (
+                  filteredConsistency.map(({ item, respondentNumber }) => {
+                    const badge = getConsistencyBadgeMeta(item.status);
+                    return (
+                      <TableRow key={item.respondentId}>
+                        <TableCell className="font-mono text-xs text-muted-foreground tabular-nums">
+                          #{respondentNumber}
+                        </TableCell>
+                        <TableCell className="font-medium text-foreground">
+                          {item.name}
+                        </TableCell>
+                        <TableCell
+                          className="text-right font-mono text-xs tabular-nums"
+                          title={item.signedArea.toFixed(MATRIX_DECIMALS)}
+                        >
+                          {formatConsistencyMetric(item.signedArea)}
+                        </TableCell>
+                        <TableCell
+                          className="text-right font-mono text-xs tabular-nums"
+                          title={item.absSignedArea.toFixed(MATRIX_DECIMALS)}
+                        >
+                          {formatConsistencyMetric(item.absSignedArea)}
+                        </TableCell>
+                        <TableCell
+                          className="text-right font-mono text-xs tabular-nums"
+                          title={item.alpha.toFixed(MATRIX_DECIMALS)}
+                        >
+                          {formatConsistencyMetric(item.alpha)}
+                        </TableCell>
+                        <TableCell
+                          className="text-right font-mono text-xs font-semibold tabular-nums"
+                          title={item.sqrtAlpha.toFixed(MATRIX_DECIMALS)}
+                        >
+                          {formatConsistencyMetric(item.sqrtAlpha)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant="outline" className={badge.className}>
+                            {badge.label}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Section B: Step-by-Step Mathematical Audit Inspector */}
       <Card>
         <CardHeader className="gap-4 border-b pb-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Sigma className="size-4 text-primary" aria-hidden="true" />
-                Inspektor Matriks Audit Matematis (6 Tahap)
+                Inspektor Matriks Perhitungan GADA (6 Tahap)
               </CardTitle>
               <CardDescription>
-                Telusuri seluruh matriks antara dari GADA (presisi hingga 6 desimal) dan salin langsung sebagai tabel Markdown atau TSV.
+                Telusuri seluruh matriks antara (presisi 6 desimal) dan salin
+                langsung untuk kebutuhan laporan.
               </CardDescription>
             </div>
 
@@ -853,11 +779,14 @@ export function AuditDiagnosticsView({
                 className="gap-1.5"
               >
                 {isMarkdownCopied ? (
-                  <Check className="size-3.5 text-emerald-600" aria-hidden="true" />
+                  <Check
+                    className="size-3.5 text-emerald-600"
+                    aria-hidden="true"
+                  />
                 ) : (
                   <Copy className="size-3.5" aria-hidden="true" />
                 )}
-                {isMarkdownCopied ? "Tersalin (MD)" : "Copy Markdown"}
+                {isMarkdownCopied ? "Tersalin (MD)" : "Salin Markdown"}
               </Button>
 
               <Button
@@ -869,22 +798,14 @@ export function AuditDiagnosticsView({
                 className="gap-1.5"
               >
                 {isTsvCopied ? (
-                  <Check className="size-3.5 text-emerald-600" aria-hidden="true" />
+                  <Check
+                    className="size-3.5 text-emerald-600"
+                    aria-hidden="true"
+                  />
                 ) : (
                   <ClipboardList className="size-3.5" aria-hidden="true" />
                 )}
-                {isTsvCopied ? "Tersalin (TSV)" : "Copy TSV"}
-              </Button>
-
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={handleExportExcel}
-                className="gap-1.5"
-              >
-                <FileSpreadsheet className="size-3.5" aria-hidden="true" />
-                Export 4-Sheet Excel Report
+                {isTsvCopied ? "Tersalin (TSV)" : "Salin TSV"}
               </Button>
             </div>
           </div>
@@ -923,7 +844,11 @@ export function AuditDiagnosticsView({
               }
 
               return (
-                <TabsContent key={tab.key} value={tab.key} className="space-y-4">
+                <TabsContent
+                  key={tab.key}
+                  value={tab.key}
+                  className="space-y-4"
+                >
                   <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="space-y-0.5">
                       <div className="text-sm font-semibold text-foreground">
@@ -933,60 +858,53 @@ export function AuditDiagnosticsView({
                         {tab.formulaDescription}
                       </p>
                     </div>
-                    <Badge variant="outline" className="w-fit shrink-0 font-mono">
+                    <Badge
+                      variant="outline"
+                      className="w-fit shrink-0 font-mono"
+                    >
                       Dimensi: {activeMatrixData.rowCount} ×{" "}
                       {activeMatrixData.colCount}
                     </Badge>
                   </div>
 
-                  {activeMatrixData.rows.length === 0 ? (
-                    <Alert>
-                      <Info className="size-4" aria-hidden="true" />
-                      <AlertTitle>Matriks Tidak Tersedia</AlertTitle>
-                      <AlertDescription>
-                        Matriks responden tidak dihitung ketika override bobot personal aktif atau jumlah responden kosong.
-                      </AlertDescription>
-                    </Alert>
-                  ) : (
-                    <div className="rounded-lg border border-border [&_[data-slot=table-container]]:max-h-[480px] [&_[data-slot=table-container]]:overflow-auto">
-                      <Table>
-                        <TableHeader className="sticky top-0 z-20 bg-background">
-                          <TableRow>
-                            {activeMatrixData.headers.map((header, colIdx) => (
-                              <TableHead
-                                key={`${tab.key}-head-${colIdx}`}
+                  <div className="rounded-lg border border-border [&_[data-slot=table-container]]:max-h-[480px] [&_[data-slot=table-container]]:overflow-auto">
+                    <Table>
+                      <TableHeader className="sticky top-0 z-20 bg-background">
+                        <TableRow>
+                          {activeMatrixData.headers.map((header, colIdx) => (
+                            <TableHead
+                              key={`${tab.key}-head-${colIdx}`}
+                              className={
+                                colIdx === 0
+                                  ? "sticky left-0 z-30 min-w-[180px] border-r border-border bg-background font-semibold"
+                                  : "text-right font-mono text-xs"
+                              }
+                            >
+                              {header}
+                            </TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {activeMatrixData.rows.map((rowCells, rowIdx) => (
+                          <TableRow key={`${tab.key}-row-${rowIdx}`}>
+                            {rowCells.map((cell, colIdx) => (
+                              <TableCell
+                                key={`${tab.key}-cell-${rowIdx}-${colIdx}`}
                                 className={
                                   colIdx === 0
-                                    ? "sticky left-0 z-30 min-w-[180px] border-r border-border bg-background font-semibold"
-                                    : "text-right font-mono text-xs"
+                                    ? "sticky left-0 z-10 border-r border-border bg-background font-medium text-foreground"
+                                    : "text-right font-mono text-xs tabular-nums"
                                 }
                               >
-                                {header}
-                              </TableHead>
+                                {cell}
+                              </TableCell>
                             ))}
                           </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {activeMatrixData.rows.map((rowCells, rowIdx) => (
-                            <TableRow key={`${tab.key}-row-${rowIdx}`}>
-                              {rowCells.map((cell, colIdx) => (
-                                <TableCell
-                                  key={`${tab.key}-cell-${rowIdx}-${colIdx}`}
-                                  className={
-                                    colIdx === 0
-                                      ? "sticky left-0 z-10 border-r border-border bg-background font-medium text-foreground"
-                                      : "text-right font-mono text-xs tabular-nums"
-                                  }
-                                >
-                                  {cell}
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </TabsContent>
               );
             })}

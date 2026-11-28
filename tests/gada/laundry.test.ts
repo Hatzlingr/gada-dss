@@ -17,26 +17,26 @@ const EXPECTED_WEIGHTS = [
 ] as const;
 
 const EXPECTED_RANKINGS = [
-  { rank: 1, name: "Laundry Bedeng Putih", gadaIndex: 0.047294, relativeScore: 0.062660, tier: "Sangat Direkomendasikan" },
-  { rank: 2, name: "Laundry Mbak Vivin", gadaIndex: 0.046062, relativeScore: 0.061027, tier: "Sangat Direkomendasikan" },
-  { rank: 3, name: "Express Pro Laundry", gadaIndex: 0.045893, relativeScore: 0.060804, tier: "Sangat Direkomendasikan" },
-  { rank: 4, name: "Para Laundry", gadaIndex: 0.045431, relativeScore: 0.060192, tier: "Direkomendasikan" },
-  { rank: 5, name: "Laundry Neng Emi", gadaIndex: 0.044375, relativeScore: 0.058792, tier: "Direkomendasikan" },
-  { rank: 6, name: "Sahabat Laundry", gadaIndex: 0.043984, relativeScore: 0.058274, tier: "Direkomendasikan" },
-  { rank: 7, name: "Nayla Laundry", gadaIndex: 0.040387, relativeScore: 0.053509, tier: "Direkomendasikan" },
-  { rank: 8, name: "Cekgu Laundry", gadaIndex: 0.039541, relativeScore: 0.052388, tier: "Direkomendasikan" },
-  { rank: 9, name: "Mely Laundry", gadaIndex: 0.039489, relativeScore: 0.052318, tier: "Direkomendasikan" },
-  { rank: 10, name: "Ama Laundry", gadaIndex: 0.037672, relativeScore: 0.049911, tier: "Direkomendasikan" },
-  { rank: 11, name: "Silvy Laundry", gadaIndex: 0.037263, relativeScore: 0.049369, tier: "Kurang Direkomendasikan" },
-  { rank: 12, name: "Azka Laundry", gadaIndex: 0.037025, relativeScore: 0.049054, tier: "Kurang Direkomendasikan" },
-  { rank: 13, name: "Laundry Pangeran", gadaIndex: 0.035437, relativeScore: 0.046950, tier: "Kurang Direkomendasikan" },
-  { rank: 14, name: "Sanshan Laundry", gadaIndex: 0.032842, relativeScore: 0.043512, tier: "Kurang Direkomendasikan" },
-  { rank: 15, name: "Pasti Fresh Laundry", gadaIndex: 0.032252, relativeScore: 0.042731, tier: "Kurang Direkomendasikan" },
-  { rank: 16, name: "Apix Laundry", gadaIndex: 0.030990, relativeScore: 0.041059, tier: "Kurang Direkomendasikan" },
-  { rank: 17, name: "Rolansa Laundry", gadaIndex: 0.030250, relativeScore: 0.040079, tier: "Kurang Direkomendasikan" },
-  { rank: 18, name: "DMA Laundry", gadaIndex: 0.029855, relativeScore: 0.039555, tier: "Kurang Direkomendasikan" },
-  { rank: 19, name: "Zeva Laundry", gadaIndex: 0.029791, relativeScore: 0.039471, tier: "Kurang Direkomendasikan" },
-  { rank: 20, name: "Kaysha Laundry", gadaIndex: 0.028940, relativeScore: 0.038343, tier: "Kurang Direkomendasikan" },
+  { rank: 1, name: "Laundry Bedeng Putih", gadaIndex: 0.047294, relativeScore: 0.062660 },
+  { rank: 2, name: "Laundry Mbak Vivin", gadaIndex: 0.046062, relativeScore: 0.061027 },
+  { rank: 3, name: "Express Pro Laundry", gadaIndex: 0.045893, relativeScore: 0.060804 },
+  { rank: 4, name: "Para Laundry", gadaIndex: 0.045431, relativeScore: 0.060192 },
+  { rank: 5, name: "Laundry Neng Emi", gadaIndex: 0.044375, relativeScore: 0.058792 },
+  { rank: 6, name: "Sahabat Laundry", gadaIndex: 0.043984, relativeScore: 0.058274 },
+  { rank: 7, name: "Nayla Laundry", gadaIndex: 0.040387, relativeScore: 0.053509 },
+  { rank: 8, name: "Cekgu Laundry", gadaIndex: 0.039541, relativeScore: 0.052388 },
+  { rank: 9, name: "Mely Laundry", gadaIndex: 0.039489, relativeScore: 0.052318 },
+  { rank: 10, name: "Ama Laundry", gadaIndex: 0.037672, relativeScore: 0.049911 },
+  { rank: 11, name: "Silvy Laundry", gadaIndex: 0.037263, relativeScore: 0.049369 },
+  { rank: 12, name: "Azka Laundry", gadaIndex: 0.037025, relativeScore: 0.049054 },
+  { rank: 13, name: "Laundry Pangeran", gadaIndex: 0.035437, relativeScore: 0.046950 },
+  { rank: 14, name: "Sanshan Laundry", gadaIndex: 0.032842, relativeScore: 0.043512 },
+  { rank: 15, name: "Pasti Fresh Laundry", gadaIndex: 0.032252, relativeScore: 0.042731 },
+  { rank: 16, name: "Apix Laundry", gadaIndex: 0.030990, relativeScore: 0.041059 },
+  { rank: 17, name: "Rolansa Laundry", gadaIndex: 0.030250, relativeScore: 0.040079 },
+  { rank: 18, name: "DMA Laundry", gadaIndex: 0.029855, relativeScore: 0.039555 },
+  { rank: 19, name: "Zeva Laundry", gadaIndex: 0.029791, relativeScore: 0.039471 },
+  { rank: 20, name: "Kaysha Laundry", gadaIndex: 0.028940, relativeScore: 0.038343 },
 ] as const;
 
 describe("Layer A: parseRawCell universal parser", () => {
@@ -207,7 +207,6 @@ describe("UNSRI Laundry Seed Benchmark (Group 6)", () => {
       expect(actual).toBeDefined();
       expect(actual?.rank).toBe(expected.rank);
       expect(actual?.name).toBe(expected.name);
-      expect(actual?.tier).toBe(expected.tier);
       expect(Math.abs((actual?.gadaIndex ?? 0) - expected.gadaIndex)).toBeLessThan(1e-6);
       expect(Math.abs((actual?.relativeScore ?? 0) - expected.relativeScore)).toBeLessThan(1e-6);
     });
@@ -228,7 +227,7 @@ describe("UNSRI Laundry Seed Benchmark (Group 6)", () => {
   });
 });
 
-describe("Edge Cases, Guards, Simulator Overrides, and Multi-Domain Generality", () => {
+describe("Edge Cases, Guards, and Multi-Domain Generality", () => {
   it("rejects zero or negative values in active alternative cells with descriptive errors", () => {
     const zeroInput: GadaInput = {
       ...laundrySeedInput,
@@ -269,7 +268,7 @@ describe("Edge Cases, Guards, Simulator Overrides, and Multi-Domain Generality",
     expect(() => runGadaAnalysis(invalidRespInput)).toThrow(/strictly > 0/);
   });
 
-  it("enforces minimum dimension guards (M < 2, S = 0, N = 0 without overrides)", () => {
+  it("enforces minimum dimension guards (M < 2, S = 0, N = 0)", () => {
     const tooFewCriteria: GadaInput = {
       ...laundrySeedInput,
       criteria: laundrySeedInput.criteria.slice(0, 1),
@@ -383,46 +382,5 @@ describe("Edge Cases, Guards, Simulator Overrides, and Multi-Domain Generality",
     const rSum = output.rankings.reduce((acc, r) => acc + r.relativeScore, 0);
     expect(Math.abs(wSum - 1)).toBeLessThan(1e-9);
     expect(Math.abs(rSum - 1)).toBeLessThan(1e-9);
-  });
-
-  it("supports personal simulator overrideWeights recalculation", () => {
-    const equalOverrides: Record<string, number> = {
-      c1: 3,
-      c2: 3,
-      c3: 3,
-      c4: 3,
-      c5: 3,
-      c6: 3,
-      c7: 3,
-      c8: 3,
-      c9: 3,
-    };
-
-    const equalOutput = runGadaAnalysis(
-      { ...laundrySeedInput, respondents: [] },
-      equalOverrides
-    );
-    expect(equalOutput.respondentConsistency).toEqual([]);
-    for (const w of equalOutput.criteriaWeights) {
-      expect(w.normalizedWeight).toBeCloseTo(1 / 9, 9);
-    }
-
-    // Prioritize Distance (C4) heavily at 5 while others are 1 -> Para Laundry (100 m) jumps to #1
-    const distanceFocusedOverrides: Record<string, number> = {
-      c1: 1,
-      c2: 1,
-      c3: 1,
-      c4: 5,
-      c5: 1,
-      c6: 1,
-      c7: 1,
-      c8: 1,
-      c9: 1,
-    };
-    const distanceOutput = runGadaAnalysis(
-      laundrySeedInput,
-      distanceFocusedOverrides
-    );
-    expect(distanceOutput.rankings[0]?.name).toBe("Para Laundry");
   });
 });

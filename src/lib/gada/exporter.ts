@@ -4,7 +4,6 @@ import type {
   CriterionConfig,
   GadaInput,
   GadaOutput,
-  RespondentItem,
 } from "./types";
 
 export type MatrixCellValue = string | number;
@@ -135,7 +134,6 @@ function buildRankingSheetRows(output: GadaOutput): SheetCell[][] {
     "GADA Index (r_hat_j)",
     "Relative Score (R_hat_j)",
     "Percentage (%)",
-    "Recommendation Tier",
   ];
 
   const dataRows: SheetCell[][] = output.rankings.map((item) => [
@@ -146,7 +144,6 @@ function buildRankingSheetRows(output: GadaOutput): SheetCell[][] {
     item.gadaIndex,
     item.relativeScore,
     item.relativeScore * PERCENTAGE_SCALE,
-    item.tier,
   ]);
 
   return [headers, ...dataRows];
@@ -231,22 +228,12 @@ function buildCriteriaWeightsSheetRows(output: GadaOutput): SheetCell[][] {
   return rows;
 }
 
-function buildConsistencySheetRows(
-  input: GadaInput,
-  output: GadaOutput
-): SheetCell[][] {
-  const respondentById = new Map<string, RespondentItem>(
-    input.respondents.map((respondent) => [respondent.id, respondent])
-  );
-
+function buildConsistencySheetRows(output: GadaOutput): SheetCell[][] {
   const rows: SheetCell[][] = [
     [
       "No",
       "Respondent ID",
       "Respondent Name",
-      "Faculty",
-      "Major",
-      "Batch",
       "Signed Area (s_i)",
       "Abs Signed Area (|s_i|)",
       "Alpha (alpha_i)",
@@ -256,21 +243,15 @@ function buildConsistencySheetRows(
   ];
 
   if (output.respondentConsistency.length === 0) {
-    rows.push([
-      "No respondent consistency data available (override weights active or empty).",
-    ]);
+    rows.push(["No respondent consistency data available."]);
     return rows;
   }
 
   output.respondentConsistency.forEach((item, index) => {
-    const meta = respondentById.get(item.respondentId);
     rows.push([
       index + 1,
       item.respondentId,
       item.name,
-      meta?.faculty ?? "",
-      meta?.major ?? "",
-      meta?.batch !== undefined ? String(meta.batch) : "",
       item.signedArea,
       item.absSignedArea,
       item.alpha,
@@ -296,7 +277,7 @@ function appendMatrixSection(
   target.push([title]);
 
   if (matrix.length === 0) {
-    target.push(["(Not generated — override weights active or no rows)"]);
+    target.push(["(Not generated — no rows available)"]);
     return;
   }
 
@@ -383,7 +364,7 @@ function buildAuditMatricesSheetRows(
 /**
  * Builds the 4-sheet GADA report workbook without triggering browser side effects.
  */
-export function buildGadaReportWorkbook(
+function buildGadaReportWorkbook(
   input: GadaInput,
   output: GadaOutput
 ): XLSX.WorkBook {
@@ -401,7 +382,7 @@ export function buildGadaReportWorkbook(
   );
   XLSX.utils.book_append_sheet(
     workbook,
-    buildWorksheet(buildConsistencySheetRows(input, output)),
+    buildWorksheet(buildConsistencySheetRows(output)),
     "Respondent Consistency"
   );
   XLSX.utils.book_append_sheet(

@@ -3,7 +3,6 @@ import {
   BINARY_TRUE_WORDS,
   CONSISTENCY_THRESHOLDS,
   DEFAULT_GADA_OPTIONS,
-  DEFAULT_SLIDER_SCORE,
   HOURS_PER_DAY,
   METERS_PER_KILOMETER,
   MIN_ACTIVE_CRITERIA,
@@ -13,8 +12,6 @@ import {
   MISSING_VALUE_MARKERS,
   NUMERIC_EPSILON,
   PERCENTAGE_SCALE,
-  RECOMMENDATION_TIER_CUTOFFS,
-  RECOMMENDATION_TIER_LABELS,
 } from "./constants";
 import type {
   AlternativeItem,
@@ -29,7 +26,6 @@ import type {
   ImputationLog,
   ImputationStrategy,
   RawCellValue,
-  RecommendationTier,
   RespondentConsistencyResult,
   RespondentItem,
 } from "./types";
@@ -382,31 +378,6 @@ function assignCriterionWeightRanks(
   });
 }
 
-function computeOverrideWeights(
-  activeCriteria: CriterionConfig[],
-  overrideWeights: Record<string, number>
-): CriterionWeightResult[] {
-  const rawWeights = activeCriteria.map((criterion) => {
-    const provided = overrideWeights[criterion.id];
-    const score = provided === undefined ? DEFAULT_SLIDER_SCORE : provided;
-    if (!Number.isFinite(score) || score <= 0) {
-      throw new Error(
-        `Invalid override weight (${score}) for criterion "${criterion.name}" (${criterion.code}): must be strictly > 0.`
-      );
-    }
-    return score;
-  });
-
-  const totalWeight = rawWeights.reduce((acc, w) => acc + w, 0);
-  const normalizedWeights = rawWeights.map((w) => w / totalWeight);
-
-  return assignCriterionWeightRanks(
-    activeCriteria,
-    normalizedWeights,
-    normalizedWeights
-  );
-}
-
 interface GroupWeightComputation {
   criteriaWeights: CriterionWeightResult[];
   respondentConsistency: RespondentConsistencyResult[];
@@ -575,16 +546,6 @@ function computeReciprocatedMatrix(
   );
 }
 
-function classifyRecommendationTier(rank: number): RecommendationTier {
-  if (rank <= RECOMMENDATION_TIER_CUTOFFS.TOP_MAX_RANK) {
-    return RECOMMENDATION_TIER_LABELS.TOP;
-  }
-  if (rank <= RECOMMENDATION_TIER_CUTOFFS.RECOMMENDED_MAX_RANK) {
-    return RECOMMENDATION_TIER_LABELS.RECOMMENDED;
-  }
-  return RECOMMENDATION_TIER_LABELS.LOW;
-}
-
 function computeAlternativeRankings(
   alternatives: AlternativeItem[],
   reciprocatedMatrix: number[][],
@@ -617,30 +578,23 @@ function computeAlternativeRankings(
       b.relativeScore - a.relativeScore || a.originalIndex - b.originalIndex
   );
 
-  return scored.map((entry, sortedIndex) => {
-    const rank = sortedIndex + 1;
-    return {
-      alternativeId: entry.alternative.id,
-      name: entry.alternative.name,
-      ...(entry.alternative.address !== undefined
-        ? { address: entry.alternative.address }
-        : {}),
-      gadaIndex: entry.gadaIndex,
-      relativeScore: entry.relativeScore,
-      rank,
-      tier: classifyRecommendationTier(rank),
-    };
-  });
+  return scored.map((entry, sortedIndex) => ({
+    alternativeId: entry.alternative.id,
+    name: entry.alternative.name,
+    ...(entry.alternative.address !== undefined
+      ? { address: entry.alternative.address }
+      : {}),
+    gadaIndex: entry.gadaIndex,
+    relativeScore: entry.relativeScore,
+    rank: sortedIndex + 1,
+  }));
 }
 
 /**
  * Executes the complete adapted Grey Absolute Decision Analysis (GADA) pipeline
- * on any domain dataset, optionally overriding group weights with personal scores.
+ * on any domain dataset.
  */
-export function runGadaAnalysis(
-  input: GadaInput,
-  overrideWeights?: Record<string, number>
-): GadaOutput {
+export function runGadaAnalysis(input: GadaInput): GadaOutput {
   if (input.alternatives.length < MIN_ALTERNATIVES) {
     throw new Error(
       `At least ${MIN_ALTERNATIVES} alternative is required, found ${input.alternatives.length}.`
@@ -654,24 +608,11 @@ export function runGadaAnalysis(
     input.options
   );
 
-  const groupWeights: GroupWeightComputation =
-    overrideWeights !== undefined
-      ? {
-          criteriaWeights: computeOverrideWeights(
-            preprocessed.activeCriteria,
-            overrideWeights
-          ),
-          respondentConsistency: [],
-          betaMatrix: [],
-          zeroPointMatrix: [],
-          agrpcMatrix: [],
-          thetaMatrix: [],
-        }
-      : computeGroupCriterionWeights(
-          input.respondents,
-          preprocessed.activeCriteria,
-          input.respondentScores
-        );
+  const groupWeights = computeGroupCriterionWeights(
+    input.respondents,
+    preprocessed.activeCriteria,
+    input.respondentScores
+  );
 
   const reciprocatedMatrix = computeReciprocatedMatrix(
     preprocessed.cleanedMatrix,
